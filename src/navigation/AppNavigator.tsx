@@ -9,7 +9,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
 
 import { useAuth } from '../contexts/AuthContext';
-import { RootStackParamList, AuthStackParamList } from './types';
+import { 
+  RootStackParamList, 
+  AuthStackParamList, 
+  TenantStackParamList, 
+  AgentStackParamList 
+} from './types';
 
 // Auth screens (to be created)
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
@@ -21,6 +26,7 @@ import GuestJoinScreen from '../screens/auth/GuestJoinScreen';
 import TenantHomeScreen from '../screens/tenant/TenantHomeScreen';
 import ScanQRScreen from '../screens/tenant/ScanQRScreen';
 import WaitlistViewScreen from '../screens/tenant/WaitlistViewScreen';
+import TenantHistoryScreen from '../screens/tenant/TenantHistoryScreen';
 
 // Agent screens (to be created)
 import AgentHomeScreen from '../screens/agent/AgentHomeScreen';
@@ -34,8 +40,8 @@ import CompletedEventWaitlistScreen from '../screens/agent/CompletedEventWaitlis
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
-const TenantStack = createNativeStackNavigator();
-const AgentStack = createNativeStackNavigator();
+const TenantStack = createNativeStackNavigator<TenantStackParamList>();
+const AgentStack = createNativeStackNavigator<AgentStackParamList>();
 
 // Auth Navigator
 const AuthNavigator = () => {
@@ -79,6 +85,11 @@ const TenantNavigator = () => {
         name="WaitlistView"
         component={WaitlistViewScreen}
         options={{ title: 'Your Position' }}
+      />
+      <TenantStack.Screen
+        name="TenantHistory"
+        component={TenantHistoryScreen}
+        options={{ title: 'My History' }}
       />
     </TenantStack.Navigator>
   );

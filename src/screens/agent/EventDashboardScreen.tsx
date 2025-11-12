@@ -76,7 +76,8 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.position}>#{item.position}</Text>
               <View style={styles.info}>
                 <Text style={styles.name}>{item.guest_name || 'User'}</Text>
-                <Text style={styles.phone}>{item.guest_phone}</Text>
+                {item.guest_phone && <Text style={styles.phone}>{item.guest_phone}</Text>}
+                {item.guest_email && <Text style={styles.phone}>{item.guest_email}</Text>}
                 <Text style={[styles.status, { color: getStatusColor(item.status) }]}>
                   {item.status}
                 </Text>

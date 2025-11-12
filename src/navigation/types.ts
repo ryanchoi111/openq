@@ -21,6 +21,7 @@ export type TenantStackParamList = {
   ScanQR: undefined;
   WaitlistView: { eventId: string; entryId: string };
   PropertyDetails: { propertyId: string };
+  TenantHistory: undefined;
 };
 
 export type AgentStackParamList = {

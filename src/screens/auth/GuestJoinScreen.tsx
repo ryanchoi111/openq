@@ -25,6 +25,7 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
   const { signInAsGuest } = useAuth();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleJoin = async () => {
@@ -40,7 +41,7 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
 
     try {
       setLoading(true);
-      await signInAsGuest(name.trim(), phone.trim());
+      await signInAsGuest(name.trim(), phone.trim(), email.trim() || undefined);
       // Navigation handled by AppNavigator based on auth state
     } catch (error) {
       Alert.alert('Error', 'Failed to join. Please try again.');
@@ -64,7 +65,9 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
 
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Name</Text>
+            <Text style={styles.label}>
+              Name <Text style={styles.required}>*</Text>
+            </Text>
             <TextInput
               style={styles.input}
               value={name}
@@ -76,7 +79,9 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
+            <Text style={styles.label}>
+              Phone Number <Text style={styles.required}>*</Text>
+            </Text>
             <TextInput
               style={styles.input}
               value={phone}
@@ -84,6 +89,19 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
               placeholder="(555) 123-4567"
               keyboardType="phone-pad"
               autoComplete="tel"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Email (Optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="your@email.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
             />
           </View>
 
@@ -147,6 +165,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#334155',
+  },
+  required: {
+    color: '#ef4444',
+    fontWeight: '700',
   },
   input: {
     borderWidth: 1,

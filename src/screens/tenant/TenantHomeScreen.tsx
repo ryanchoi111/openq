@@ -27,6 +27,13 @@ const TenantHomeScreen: React.FC<Props> = ({ navigation }) => {
 
         <TouchableOpacity
           style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate('TenantHistory')}
+        >
+          <Text style={styles.secondaryButtonText}>View My History</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.secondaryButton]}
           onPress={signOut}
         >
           <Text style={styles.secondaryButtonText}>Sign Out</Text>

@@ -91,6 +91,9 @@ const CompletedEventWaitlistScreen: React.FC<Props> = ({ route }) => {
           {item.guest_phone && (
             <Text style={styles.entryPhone}>{item.guest_phone}</Text>
           )}
+          {item.guest_email && (
+            <Text style={styles.entryPhone}>{item.guest_email}</Text>
+          )}
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{getStatusLabel(item.status)}</Text>

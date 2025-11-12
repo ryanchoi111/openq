@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS public.waitlist_entries (
   user_id UUID REFERENCES public.users(id) ON DELETE SET NULL, -- Null for guests
   guest_name TEXT, -- For guest users
   guest_phone TEXT, -- For guest users
+  guest_email TEXT, -- Optional: for guest users
   position INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'touring', 'completed', 'skipped', 'no-show')),
   joined_at TIMESTAMPTZ DEFAULT NOW(),
@@ -228,3 +229,49 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER reorder_on_delete AFTER DELETE ON public.waitlist_entries
   FOR EACH ROW EXECUTE FUNCTION reorder_waitlist_positions();
+
+-- Function to reorder waitlist entries atomically (for manual reordering)
+CREATE OR REPLACE FUNCTION reorder_waitlist_entry(
+  p_entry_id UUID,
+  p_new_position INTEGER
+)
+RETURNS void AS $$
+DECLARE
+  v_old_position INTEGER;
+  v_event_id UUID;
+BEGIN
+  -- Get current position and event_id
+  SELECT position, event_id INTO v_old_position, v_event_id
+  FROM public.waitlist_entries
+  WHERE id = p_entry_id;
+  
+  IF v_old_position IS NULL THEN
+    RAISE EXCEPTION 'Entry not found';
+  END IF;
+  
+  IF v_old_position = p_new_position THEN
+    RETURN;
+  END IF;
+  
+  IF p_new_position < v_old_position THEN
+    -- Moving up - shift down entries between new and old position
+    UPDATE public.waitlist_entries
+    SET position = position + 1
+    WHERE event_id = v_event_id
+      AND position >= p_new_position
+      AND position < v_old_position;
+  ELSE
+    -- Moving down - shift up entries between old and new position
+    UPDATE public.waitlist_entries
+    SET position = position - 1
+    WHERE event_id = v_event_id
+      AND position > v_old_position
+      AND position <= p_new_position;
+  END IF;
+  
+  -- Update the target entry
+  UPDATE public.waitlist_entries
+  SET position = p_new_position
+  WHERE id = p_entry_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -65,6 +65,7 @@ export const waitlistService = {
             event_id: eventId,
             guest_name: user.name,
             guest_phone: user.phone,
+            ...(user.email && { guest_email: user.email }),
             position: nextPosition,
             status: 'waiting' as const,
           }
@@ -107,6 +108,55 @@ export const waitlistService = {
     } catch (error) {
       console.error('Error fetching waitlist:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Get all waitlist entries for a specific user/tenant with event details
+   */
+  async getUserWaitlistHistory(userId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('waitlist_entries')
+        .select(`
+          *,
+          event:open_house_events (
+            start_time,
+            end_time,
+            status,
+            property:properties (
+              address,
+              address2,
+              city,
+              state,
+              zip
+            )
+          )
+        `)
+        .eq('user_id', userId)
+        .order('joined_at', { ascending: false });
+
+      // Handle errors - PGRST116 means no rows found, which is fine
+      if (error) {
+        if (error.code === 'PGRST116') {
+          console.log('[getUserWaitlistHistory] No entries found for user');
+          return [];
+        }
+        console.error('[getUserWaitlistHistory] Database error:', error);
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        console.log('[getUserWaitlistHistory] No waitlist entries found');
+        return [];
+      }
+
+      console.log(`[getUserWaitlistHistory] Found ${data.length} entries`);
+      return data;
+    } catch (error) {
+      console.error('[getUserWaitlistHistory] Error:', error);
+      // Return empty array instead of throwing to prevent infinite loading
+      return [];
     }
   },
 
@@ -167,47 +217,16 @@ export const waitlistService = {
 
   /**
    * Reorder waitlist entries (for agent to move people up/down)
+   * Uses PostgreSQL RPC for atomic position updates
    */
   async reorderEntry(entryId: string, newPosition: number): Promise<void> {
     try {
-      // Get the entry and event
-      const { data: entry, error: fetchError } = await supabase
-        .from('waitlist_entries')
-        .select('event_id, position')
-        .eq('id', entryId)
-        .single();
+      const { error } = await supabase.rpc('reorder_waitlist_entry', {
+        p_entry_id: entryId,
+        p_new_position: newPosition,
+      });
 
-      if (fetchError) throw fetchError;
-
-      const oldPosition = entry.position;
-      const eventId = entry.event_id;
-
-      if (oldPosition === newPosition) return;
-
-      // Update positions for affected entries
-      if (newPosition < oldPosition) {
-        // Moving up - shift down entries between new and old position
-        await supabase
-          .from('waitlist_entries')
-          .update({ position: supabase.sql`position + 1` })
-          .eq('event_id', eventId)
-          .gte('position', newPosition)
-          .lt('position', oldPosition);
-      } else {
-        // Moving down - shift up entries between old and new position
-        await supabase
-          .from('waitlist_entries')
-          .update({ position: supabase.sql`position - 1` })
-          .eq('event_id', eventId)
-          .gt('position', oldPosition)
-          .lte('position', newPosition);
-      }
-
-      // Update the target entry
-      await supabase
-        .from('waitlist_entries')
-        .update({ position: newPosition })
-        .eq('id', entryId);
+      if (error) throw error;
     } catch (error) {
       console.error('Error reordering entry:', error);
       throw error;

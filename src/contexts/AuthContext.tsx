@@ -18,7 +18,7 @@ interface AuthContextType {
   loading: boolean;
 
   // Guest auth methods
-  signInAsGuest: (name: string, phone: string) => Promise<void>;
+  signInAsGuest: (name: string, phone: string, email?: string) => Promise<void>;
 
   // Supabase auth methods
   signUp: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
@@ -153,12 +153,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInAsGuest = async (name: string, phone: string) => {
+  const signInAsGuest = async (name: string, phone: string, email?: string) => {
     try {
       const guestUser: GuestUser = {
         id: `guest_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
         name,
         phone,
+        email: email || undefined,
         role: 'guest',
       };
 
