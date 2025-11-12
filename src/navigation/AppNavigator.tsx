@@ -6,11 +6,10 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View } from 'react-native';
 
 import { useAuth } from '../contexts/AuthContext';
-import { RootStackParamList, AuthStackParamList, MainTabParamList } from './types';
+import { RootStackParamList, AuthStackParamList } from './types';
 
 // Auth screens (to be created)
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
@@ -30,12 +29,13 @@ import CreatePropertyScreen from '../screens/agent/CreatePropertyScreen';
 import CreateEventScreen from '../screens/agent/CreateEventScreen';
 import EventDashboardScreen from '../screens/agent/EventDashboardScreen';
 import QRDisplayScreen from '../screens/agent/QRDisplayScreen';
+import EventHistoryScreen from '../screens/agent/EventHistoryScreen';
+import CompletedEventWaitlistScreen from '../screens/agent/CompletedEventWaitlistScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const TenantStack = createNativeStackNavigator();
 const AgentStack = createNativeStackNavigator();
-const MainTab = createBottomTabNavigator<MainTabParamList>();
 
 // Auth Navigator
 const AuthNavigator = () => {
@@ -52,7 +52,19 @@ const AuthNavigator = () => {
 // Tenant Navigator
 const TenantNavigator = () => {
   return (
-    <TenantStack.Navigator>
+    <TenantStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#fff',
+        },
+        headerTitleStyle: {
+          fontWeight: '600',
+        },
+        contentStyle: {
+          backgroundColor: '#f8fafc',
+        },
+      }}
+    >
       <TenantStack.Screen
         name="TenantHome"
         component={TenantHomeScreen}
@@ -75,11 +87,23 @@ const TenantNavigator = () => {
 // Agent Navigator
 const AgentNavigator = () => {
   return (
-    <AgentStack.Navigator>
+    <AgentStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#fff',
+        },
+        headerTitleStyle: {
+          fontWeight: '600',
+        },
+        contentStyle: {
+          backgroundColor: '#f8fafc',
+        },
+      }}
+    >
       <AgentStack.Screen
         name="AgentHome"
         component={AgentHomeScreen}
-        options={{ title: 'Dashboard' }}
+        options={{ headerShown: false }}
       />
       <AgentStack.Screen
         name="Properties"
@@ -106,31 +130,26 @@ const AgentNavigator = () => {
         component={QRDisplayScreen}
         options={{ title: 'QR Code' }}
       />
+      <AgentStack.Screen
+        name="EventHistory"
+        component={EventHistoryScreen}
+        options={{ title: 'Event History' }}
+      />
+      <AgentStack.Screen
+        name="CompletedEventWaitlist"
+        component={CompletedEventWaitlistScreen}
+        options={{ title: 'Event Waitlist' }}
+      />
     </AgentStack.Navigator>
   );
 };
 
-// Main Tab Navigator
+// Main Navigator - routes based on user role
 const MainNavigator = () => {
   const { user } = useAuth();
 
-  return (
-    <MainTab.Navigator screenOptions={{ headerShown: false }}>
-      {user?.role === 'agent' ? (
-        <MainTab.Screen
-          name="AgentTab"
-          component={AgentNavigator}
-          options={{ title: 'Agent' }}
-        />
-      ) : (
-        <MainTab.Screen
-          name="TenantTab"
-          component={TenantNavigator}
-          options={{ title: 'Tenant' }}
-        />
-      )}
-    </MainTab.Navigator>
-  );
+  // Directly return the appropriate navigator based on user role
+  return user?.role === 'agent' ? <AgentNavigator /> : <TenantNavigator />;
 };
 
 // Root Navigator

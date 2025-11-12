@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS public.properties (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   agent_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   address TEXT NOT NULL,
+  address2 TEXT, -- Optional: apartment, suite, unit, etc.
   city TEXT NOT NULL,
   state TEXT NOT NULL,
   zip TEXT NOT NULL,
@@ -38,6 +39,9 @@ CREATE TABLE IF NOT EXISTS public.properties (
 );
 
 -- Open house events
+-- Status transitions: 'scheduled' (future start_time) -> 'active' (within time window) -> 'completed' (past end_time)
+-- Events are automatically transitioned when agents refresh their dashboard
+-- Only 'active' events within their time window can accept QR code scans
 CREATE TABLE IF NOT EXISTS public.open_house_events (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   property_id UUID NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,

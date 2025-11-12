@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
+  Alert,
+  RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { eventService } from '../../services/eventService';
@@ -18,23 +21,77 @@ type Props = NativeStackScreenProps<AgentStackParamList, 'AgentHome'>;
 
 const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
   const { user, signOut } = useAuth();
-  const [activeEvent, setActiveEvent] = useState<OpenHouseEvent | null>(null);
+  const [scheduledEvents, setScheduledEvents] = useState<OpenHouseEvent[]>([]);
+  const [activeEvents, setActiveEvents] = useState<OpenHouseEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadActiveEvent();
-  }, []);
+  // Reload all events whenever screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadAllEvents();
+    }, [user?.id])
+  );
 
-  const loadActiveEvent = async () => {
-    if (!user?.id) return;
+  const loadAllEvents = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     try {
-      const event = await eventService.getActiveEvent(user.id);
-      setActiveEvent(event);
+      setLoading(true);
+      const { scheduled, active } = await eventService.getEventsByAgent(user.id);
+      setScheduledEvents(scheduled);
+      setActiveEvents(active);
     } catch (error) {
-      console.error('Error loading active event:', error);
+      console.error('Error loading events:', error);
+      setScheduledEvents([]);
+      setActiveEvents([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const onRefresh = async () => {
+    if (!user?.id) return;
+    try {
+      setRefreshing(true);
+      const { scheduled, active } = await eventService.getEventsByAgent(user.id);
+      setScheduledEvents(scheduled);
+      setActiveEvents(active);
+    } catch (error) {
+      console.error('Error refreshing events:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string, propertyAddress?: string) => {
+    Alert.alert(
+      'Delete Open House',
+      `Are you sure you want to delete this open house${propertyAddress ? ` at ${propertyAddress}` : ''}?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await eventService.deleteEvent(eventId);
+              Alert.alert('Success', 'Open house deleted successfully');
+              // Reload the events list
+              loadAllEvents();
+            } catch (error: any) {
+              console.error('Error deleting event:', error);
+              Alert.alert('Error', error.message || 'Failed to delete open house');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -47,29 +104,97 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <Text style={styles.title}>Agent Dashboard</Text>
         <Text style={styles.subtitle}>Welcome, {user?.name}</Text>
 
-        {activeEvent ? (
+        {/* Scheduled Open Houses Section */}
+        {scheduledEvents.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>
+              Scheduled Open Houses ({scheduledEvents.length})
+            </Text>
+            {scheduledEvents.map((event) => (
+              <View key={event.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeaderText}>
+                    <Text style={styles.cardTitle}>Scheduled Open House</Text>
+                    <Text style={styles.property}>
+                      {event.property?.address}
+                      {event.property?.address2 ? ` ${event.property.address2}` : ''}
+                    </Text>
+                    <Text style={styles.eventTime}>
+                      {new Date(event.start_time).toLocaleString()} - 
+                      {new Date(event.end_time).toLocaleString()}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteEvent(
+                      event.id,
+                      `${event.property?.address}${event.property?.address2 ? ` ${event.property.address2}` : ''}`
+                    )}
+                  >
+                    <Text style={styles.deleteButtonText}>🗑️</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* Active Open Houses Section */}
+        {activeEvents.length > 0 ? (
+          <>
+            <Text style={styles.sectionTitle}>
+              Active Open Houses ({activeEvents.length})
+            </Text>
+            {activeEvents.map((event) => (
+              <View key={event.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeaderText}>
+                    <Text style={styles.cardTitle}>Active Open House</Text>
+                    <Text style={styles.property}>
+                      {event.property?.address}
+                      {event.property?.address2 ? ` ${event.property.address2}` : ''}
+                    </Text>
+                    <Text style={styles.eventTime}>
+                      {new Date(event.start_time).toLocaleString()} - 
+                      {new Date(event.end_time).toLocaleString()}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteEvent(
+                      event.id,
+                      `${event.property?.address}${event.property?.address2 ? ` ${event.property.address2}` : ''}`
+                    )}
+                  >
+                    <Text style={styles.deleteButtonText}>🗑️</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={() =>
+                    navigation.navigate('EventDashboard', { eventId: event.id })
+                  }
+                >
+                  <Text style={styles.buttonText}>Manage Queue</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </>
+        ) : scheduledEvents.length === 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Active Open House</Text>
-            <Text style={styles.property}>{activeEvent.property?.address}</Text>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() =>
-                navigation.navigate('EventDashboard', { eventId: activeEvent.id })
-              }
-            >
-              <Text style={styles.buttonText}>Manage Queue</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>No Active Event</Text>
+            <Text style={styles.cardTitle}>No Active Events</Text>
             <Text style={styles.cardSubtext}>Create an open house to get started</Text>
           </View>
-        )}
+        ) : null}
 
         <View style={styles.actions}>
           <TouchableOpacity
@@ -84,6 +209,13 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
             onPress={() => navigation.navigate('CreateEvent', {})}
           >
             <Text style={styles.actionButtonText}>Create Open House</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('EventHistory')}
+          >
+            <Text style={styles.actionButtonText}>View History</Text>
           </TouchableOpacity>
         </View>
 
@@ -112,9 +244,27 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  cardHeaderText: {
+    flex: 1,
+  },
   cardTitle: { fontSize: 14, color: '#64748b', fontWeight: '600', marginBottom: 8 },
   cardSubtext: { fontSize: 14, color: '#94a3b8', marginTop: 8 },
-  property: { fontSize: 18, fontWeight: '600', color: '#1e293b', marginBottom: 16 },
+  property: { fontSize: 18, fontWeight: '600', color: '#1e293b', marginBottom: 8 },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#fee2e2',
+    marginLeft: 12,
+  },
+  deleteButtonText: {
+    fontSize: 20,
+  },
   button: {
     backgroundColor: '#2563eb',
     padding: 14,
@@ -133,6 +283,17 @@ const styles = StyleSheet.create({
   actionButtonText: { fontSize: 16, fontWeight: '600', color: '#334155', textAlign: 'center' },
   logoutButton: { marginTop: 32, padding: 16, alignItems: 'center' },
   logoutButtonText: { fontSize: 16, color: '#ef4444', fontWeight: '600' },
+  sectionTitle: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: '#334155', 
+    marginBottom: 12 
+  },
+  eventTime: { 
+    fontSize: 14, 
+    color: '#64748b', 
+    marginBottom: 12 
+  },
 });
 
 export default AgentHomeScreen;

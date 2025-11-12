@@ -9,6 +9,7 @@ import { Property } from '../types';
 interface CreatePropertyParams {
   agentId: string;
   address: string;
+  address2?: string;
   city: string;
   state: string;
   zip: string;
@@ -30,6 +31,7 @@ export const propertyService = {
         .insert({
           agent_id: params.agentId,
           address: params.address,
+          address2: params.address2,
           city: params.city,
           state: params.state,
           zip: params.zip,

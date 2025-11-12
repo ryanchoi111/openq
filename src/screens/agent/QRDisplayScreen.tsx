@@ -3,7 +3,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import QRCode from 'react-native-qrcode-svg';
 import { AgentStackParamList } from '../../navigation/types';
@@ -37,7 +38,10 @@ const QRDisplayScreen: React.FC<Props> = ({ route }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Scan to Join Waitlist</Text>
-        <Text style={styles.property}>{event.property?.address}</Text>
+        <Text style={styles.property}>
+          {event.property?.address}
+          {event.property?.address2 ? ` ${event.property.address2}` : ''}
+        </Text>
 
         <View style={styles.qrContainer}>
           {event.qr_code && (

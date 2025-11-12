@@ -17,6 +17,34 @@ export const waitlistService = {
    */
   async joinWaitlist({ eventId, user }: JoinWaitlistParams): Promise<WaitlistEntry> {
     try {
+      // First, validate event exists and is active within time window
+      const { data: event, error: eventError } = await supabase
+        .from('open_house_events')
+        .select('status, start_time, end_time')
+        .eq('id', eventId)
+        .single();
+
+      if (eventError) {
+        console.error('Error fetching event for validation:', eventError);
+        throw new Error('Event not found');
+      }
+
+      const now = new Date().toISOString();
+
+      // Validate event status
+      if (event.status !== 'active') {
+        throw new Error('This open house is not currently active');
+      }
+
+      // Validate time window
+      if (now < event.start_time) {
+        throw new Error(`This open house hasn't started yet. It will begin at ${new Date(event.start_time).toLocaleString()}`);
+      }
+
+      if (now > event.end_time) {
+        throw new Error('This open house event has already ended');
+      }
+
       // Get current max position for this event
       const { data: maxPosData, error: maxPosError } = await supabase
         .from('waitlist_entries')

@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, SafeAreaView, StyleSheet } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { propertyService } from '../../services/propertyService';
@@ -12,9 +14,12 @@ const PropertiesScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuth();
   const [properties, setProperties] = useState<Property[]>([]);
 
-  useEffect(() => {
-    loadProperties();
-  }, []);
+  // Reload properties whenever the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadProperties();
+    }, [user?.id])
+  );
 
   const loadProperties = async () => {
     if (!user?.id) return;
@@ -23,7 +28,7 @@ const PropertiesScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <FlatList
         data={properties}
         keyExtractor={(item) => item.id}
@@ -37,7 +42,10 @@ const PropertiesScreen: React.FC<Props> = ({ navigation }) => {
         }
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.card}>
-            <Text style={styles.address}>{item.address}</Text>
+            <Text style={styles.address}>
+              {item.address}
+              {item.address2 ? ` ${item.address2}` : ''}
+            </Text>
             <Text style={styles.details}>
               {item.bedrooms}bd • {item.bathrooms}ba • ${item.rent}/mo
             </Text>

@@ -4,12 +4,14 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { CameraView, Camera } from 'expo-camera';
 import { TenantStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { waitlistService } from '../../services/waitlistService';
+import { eventService } from '../../services/eventService';
 
 type Props = NativeStackScreenProps<TenantStackParamList, 'ScanQR'>;
 
@@ -20,7 +22,7 @@ const ScanQRScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     (async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
+      const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === 'granted');
     })();
   }, []);
@@ -41,6 +43,41 @@ const ScanQRScreen: React.FC<Props> = ({ navigation }) => {
     try {
       if (!user) {
         Alert.alert('Error', 'Please sign in first');
+        setTimeout(() => setScanned(false), 2000);
+        return;
+      }
+
+      // Validate event is active and within time window
+      const event = await eventService.getEvent(eventId);
+      if (!event) {
+        Alert.alert('Event Not Found', 'This open house event does not exist.');
+        setTimeout(() => setScanned(false), 2000);
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      if (event.status !== 'active') {
+        Alert.alert(
+          'Event Not Active',
+          'This open house is not currently active. It may be scheduled for a later time or has already ended.'
+        );
+        setTimeout(() => setScanned(false), 2000);
+        return;
+      }
+
+      if (now < event.start_time) {
+        Alert.alert(
+          'Event Not Started',
+          `This open house hasn't started yet. It will begin at ${new Date(event.start_time).toLocaleString()}.`
+        );
+        setTimeout(() => setScanned(false), 2000);
+        return;
+      }
+
+      if (now > event.end_time) {
+        Alert.alert('Event Ended', 'This open house event has already ended.');
+        setTimeout(() => setScanned(false), 2000);
         return;
       }
 
@@ -76,9 +113,12 @@ const ScanQRScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <BarCodeScanner
-        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+      <CameraView
         style={StyleSheet.absoluteFillObject}
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        barcodeScannerSettings={{
+          barcodeTypes: ["qr"],
+        }}
       />
       <View style={styles.overlay}>
         <View style={styles.topOverlay} />

@@ -27,6 +27,7 @@ export interface Property {
   id: string;
   agent_id: string;
   address: string;
+  address2?: string; // Optional: apartment, suite, unit, etc.
   city: string;
   state: string;
   zip: string;

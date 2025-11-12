@@ -3,12 +3,14 @@ import {
   View,
   Text,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Alert,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { propertyService } from '../../services/propertyService';
@@ -23,6 +25,20 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
     route.params?.propertyId || null
   );
+
+  // Date/Time state
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    return now;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getTime() + 2 * 60 * 60 * 1000); // Default 2 hours from start
+  });
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   useEffect(() => {
     loadProperties();
@@ -40,10 +56,16 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
+    // Validate end time is after start time
+    if (endDate <= startDate) {
+      Alert.alert('Invalid Time', 'End time must be after start time');
+      return;
+    }
+
     try {
-      // Create event starting now, ending in 2 hours (simple default)
-      const startTime = new Date().toISOString();
-      const endTime = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      const startTime = startDate.toISOString();
+      const endTime = endDate.toISOString();
+      const now = new Date();
 
       const event = await eventService.createEvent({
         propertyId: selectedPropertyId,
@@ -52,21 +74,72 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
         endTime,
       });
 
-      // Set event as active
-      await eventService.updateEventStatus(event.id, 'active');
-
-      Alert.alert('Success', 'Open house created');
-      navigation.navigate('EventDashboard', { eventId: event.id });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create open house');
+      // Determine if scheduled or active
+      if (startDate > now) {
+        Alert.alert('Success', 'Open house scheduled successfully!');
+        navigation.navigate('AgentHome');
+      } else {
+        Alert.alert('Success', 'Open house created and is now active!');
+        navigation.navigate('EventDashboard', { eventId: event.id });
+      }
+    } catch (error: any) {
+      console.error('[CreateEventScreen] Error:', error);
+      Alert.alert('Error', error.message || 'Failed to create open house');
     }
   };
 
+  const onStartDateChange = (event: any, selectedDate?: Date) => {
+    setShowStartDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setStartDate(selectedDate);
+      // If end date would be before new start date, adjust it to 1 hour after start
+      if (endDate <= selectedDate) {
+        setEndDate(new Date(selectedDate.getTime() + 60 * 60 * 1000));
+      }
+    }
+  };
+
+  const onStartTimeChange = (event: any, selectedDate?: Date) => {
+    setShowStartTimePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setStartDate(selectedDate);
+      // If end date would be before new start date, adjust it to 1 hour after start
+      if (endDate <= selectedDate) {
+        setEndDate(new Date(selectedDate.getTime() + 60 * 60 * 1000));
+      }
+    }
+  };
+
+  const onEndDateChange = (event: any, selectedDate?: Date) => {
+    setShowEndDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setEndDate(selectedDate);
+    }
+  };
+
+  const onEndTimeChange = (event: any, selectedDate?: Date) => {
+    setShowEndTimePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setEndDate(selectedDate);
+    }
+  };
+
+  const formatDateTime = (date: Date) => {
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <ScrollView style={styles.content}>
         <Text style={styles.title}>Create Open House</Text>
-        <Text style={styles.subtitle}>Select a property</Text>
+        <Text style={styles.subtitle}>Select a property and schedule times</Text>
 
         {properties.map((property) => (
           <TouchableOpacity
@@ -77,19 +150,127 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
             ]}
             onPress={() => setSelectedPropertyId(property.id)}
           >
-            <Text style={styles.address}>{property.address}</Text>
+            <Text style={styles.address}>
+              {property.address}
+              {property.address2 ? ` ${property.address2}` : ''}
+            </Text>
             <Text style={styles.details}>
               {property.bedrooms}bd • {property.bathrooms}ba • ${property.rent}/mo
             </Text>
           </TouchableOpacity>
         ))}
 
+        {/* Date/Time Selection Section */}
+        <View style={styles.dateTimeSection}>
+          <Text style={styles.sectionTitle}>Schedule</Text>
+
+          {/* Start Date/Time */}
+          <View style={styles.dateTimeRow}>
+            <Text style={styles.label}>Start</Text>
+            <View style={styles.dateTimeButtons}>
+              <TouchableOpacity
+                style={styles.dateTimeButton}
+                onPress={() => setShowStartDatePicker(true)}
+              >
+                <Text style={styles.dateTimeText}>
+                  {startDate.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dateTimeButton}
+                onPress={() => setShowStartTimePicker(true)}
+              >
+                <Text style={styles.dateTimeText}>
+                  {startDate.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* End Date/Time */}
+          <View style={styles.dateTimeRow}>
+            <Text style={styles.label}>End</Text>
+            <View style={styles.dateTimeButtons}>
+              <TouchableOpacity
+                style={styles.dateTimeButton}
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <Text style={styles.dateTimeText}>
+                  {endDate.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dateTimeButton}
+                onPress={() => setShowEndTimePicker(true)}
+              >
+                <Text style={styles.dateTimeText}>
+                  {endDate.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Date/Time Pickers */}
+        {showStartDatePicker && (
+          <DateTimePicker
+            value={startDate}
+            mode="date"
+            display="default"
+            onChange={onStartDateChange}
+            minimumDate={new Date()}
+          />
+        )}
+        {showStartTimePicker && (
+          <DateTimePicker
+            value={startDate}
+            mode="time"
+            display="default"
+            onChange={onStartTimeChange}
+          />
+        )}
+        {showEndDatePicker && (
+          <DateTimePicker
+            value={endDate}
+            mode="date"
+            display="default"
+            onChange={onEndDateChange}
+            minimumDate={startDate}
+          />
+        )}
+        {showEndTimePicker && (
+          <DateTimePicker
+            value={endDate}
+            mode="time"
+            display="default"
+            onChange={onEndTimeChange}
+          />
+        )}
+
         <TouchableOpacity
           style={[styles.button, !selectedPropertyId && styles.buttonDisabled]}
           onPress={handleCreate}
           disabled={!selectedPropertyId}
         >
-          <Text style={styles.buttonText}>Create & Start</Text>
+          <Text style={styles.buttonText}>
+            {endDate <= startDate ? 'Schedule Open House' : 'Create & Start Now'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -112,6 +293,46 @@ const styles = StyleSheet.create({
   propertyCardSelected: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
   address: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
   details: { fontSize: 14, color: '#64748b', marginTop: 4 },
+  dateTimeSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 16,
+  },
+  dateTimeRow: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 8,
+  },
+  dateTimeButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateTimeButton: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  dateTimeText: {
+    fontSize: 16,
+    color: '#1e293b',
+    fontWeight: '500',
+  },
   button: { backgroundColor: '#2563eb', padding: 16, borderRadius: 8, marginTop: 20 },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },

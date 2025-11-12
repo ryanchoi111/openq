@@ -6,7 +6,7 @@ import { NavigatorScreenParams } from '@react-navigation/native';
 
 export type RootStackParamList = {
   Auth: undefined;
-  Main: NavigatorScreenParams<MainTabParamList>;
+  Main: undefined;
 };
 
 export type AuthStackParamList = {
@@ -14,11 +14,6 @@ export type AuthStackParamList = {
   SignIn: undefined;
   SignUp: undefined;
   GuestJoin: { eventId?: string };
-};
-
-export type MainTabParamList = {
-  TenantTab: NavigatorScreenParams<TenantStackParamList>;
-  AgentTab: NavigatorScreenParams<AgentStackParamList>;
 };
 
 export type TenantStackParamList = {
@@ -36,4 +31,6 @@ export type AgentStackParamList = {
   CreateEvent: { propertyId?: string };
   EventDashboard: { eventId: string };
   QRDisplay: { eventId: string };
+  EventHistory: undefined;
+  CompletedEventWaitlist: { eventId: string };
 };
