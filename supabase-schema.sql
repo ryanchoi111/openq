@@ -99,6 +99,10 @@ CREATE INDEX IF NOT EXISTS idx_waitlist_user_id ON public.waitlist_entries(user_
 CREATE INDEX IF NOT EXISTS idx_waitlist_status ON public.waitlist_entries(status);
 CREATE INDEX IF NOT EXISTS idx_waitlist_position ON public.waitlist_entries(event_id, position);
 
+-- Unique constraint to ensure no duplicate positions within an event
+CREATE UNIQUE INDEX IF NOT EXISTS idx_waitlist_unique_position 
+  ON public.waitlist_entries(event_id, position);
+
 -- Enable Row Level Security
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
@@ -231,6 +235,11 @@ CREATE TRIGGER reorder_on_delete AFTER DELETE ON public.waitlist_entries
   FOR EACH ROW EXECUTE FUNCTION reorder_waitlist_positions();
 
 -- Function to reorder waitlist entries atomically (for manual reordering)
+-- Ensures:
+--   1. All position updates happen in a single transaction
+--   2. No duplicate positions (enforced by unique index)
+--   3. Sequential positions with no gaps (validated post-update)
+--   4. Proper shifting of other entries when moving up or down
 CREATE OR REPLACE FUNCTION reorder_waitlist_entry(
   p_entry_id UUID,
   p_new_position INTEGER
@@ -273,5 +282,43 @@ BEGIN
   UPDATE public.waitlist_entries
   SET position = p_new_position
   WHERE id = p_entry_id;
+  
+  -- Verify positions are sequential and have no gaps
+  -- This ensures data integrity after reordering
+  PERFORM * FROM (
+    SELECT 
+      position,
+      ROW_NUMBER() OVER (ORDER BY position) as expected_position
+    FROM public.waitlist_entries
+    WHERE event_id = v_event_id
+  ) AS position_check
+  WHERE position != expected_position;
+  
+  IF FOUND THEN
+    RAISE EXCEPTION 'Position integrity check failed: gaps or duplicates detected';
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to repair position sequence (removes gaps, ensures 1,2,3,...)
+-- Use this if position integrity issues are detected
+CREATE OR REPLACE FUNCTION repair_waitlist_positions(p_event_id UUID)
+RETURNS void AS $$
+BEGIN
+  -- Reassign positions sequentially based on current order
+  WITH numbered_entries AS (
+    SELECT 
+      id,
+      ROW_NUMBER() OVER (ORDER BY position, joined_at) as new_position
+    FROM public.waitlist_entries
+    WHERE event_id = p_event_id
+  )
+  UPDATE public.waitlist_entries w
+  SET position = n.new_position
+  FROM numbered_entries n
+  WHERE w.id = n.id
+    AND w.position != n.new_position;
+    
+  RAISE NOTICE 'Repaired positions for event %', p_event_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
