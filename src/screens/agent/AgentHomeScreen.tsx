@@ -20,7 +20,7 @@ import { OpenHouseEvent } from '../../types';
 type Props = NativeStackScreenProps<AgentStackParamList, 'AgentHome'>;
 
 const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [scheduledEvents, setScheduledEvents] = useState<OpenHouseEvent[]>([]);
   const [activeEvents, setActiveEvents] = useState<OpenHouseEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -219,10 +219,6 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
 
         </View>
-
-        <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
-          <Text style={styles.logoutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -291,8 +287,6 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   actionButtonText: { fontSize: 16, fontWeight: '600', color: '#334155', textAlign: 'center' },
-  logoutButton: { marginTop: 32, padding: 16, alignItems: 'center' },
-  logoutButtonText: { fontSize: 16, color: '#ef4444', fontWeight: '600' },
   sectionTitle: { 
     fontSize: 18, 
     fontWeight: '600', 

@@ -87,7 +87,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
     const selectedEntries = entries.filter(entry => selectedIds.has(entry.id));
     const entriesWithEmails = selectedEntries.filter(entry => {
       // For authenticated users, we need their email from the user profile
-      // For guests, we need guest_email
+      // For guests, guest_email is always present (required field)
       return entry.user_id || entry.guest_email;
     });
 
@@ -124,7 +124,9 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
               await applicationService.sendApplicationToTenants(
                 eventId,
                 Array.from(selectedIds),
-                applicationUrl
+                applicationUrl,
+                user.id,
+                user.name
               );
               Alert.alert(
                 'Success',
@@ -171,7 +173,6 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
         ) : (
           entries.map((entry, index) => {
             const isSelected = selectedIds.has(entry.id);
-            const hasEmail = entry.user_id || entry.guest_email;
 
             return (
               <TouchableOpacity
@@ -179,10 +180,8 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                 style={[
                   styles.card,
                   isSelected && styles.cardSelected,
-                  !hasEmail && styles.cardDisabled,
                 ]}
-                onPress={() => hasEmail && toggleSelection(entry.id)}
-                disabled={!hasEmail}
+                onPress={() => toggleSelection(entry.id)}
               >
                 <View style={styles.cardContent}>
                   <View style={styles.cardLeft}>
@@ -196,9 +195,6 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                       )}
                       {entry.guest_email && (
                         <Text style={styles.cardDetail}>{entry.guest_email}</Text>
-                      )}
-                      {!hasEmail && (
-                        <Text style={styles.noEmailText}>No email available</Text>
                       )}
                     </View>
                   </View>

@@ -8,6 +8,7 @@
 
 import { supabase } from '../config/supabase';
 import { waitlistService } from './waitlistService';
+import { emailTemplateService } from './emailTemplateService';
 
 export const applicationService = {
   /**
@@ -15,18 +16,22 @@ export const applicationService = {
    * @param eventId - The open house event ID
    * @param entryIds - Array of waitlist entry IDs to send application to
    * @param applicationUrl - URL of the housing application document
+   * @param agentId - The agent's user ID
+   * @param agentName - The agent's name
    */
   async sendApplicationToTenants(
     eventId: string,
     entryIds: string[],
-    applicationUrl: string
+    applicationUrl: string,
+    agentId: string,
+    agentName: string
   ): Promise<void> {
     try {
       // Get all waitlist entries
-      const entries = await waitlistService.getWaitlistByEvent(eventId);
+      const entries = await waitlistService.getWaitlist(eventId);
       
       // Filter to only selected entries
-      const selectedEntries = entries.filter(entry => entryIds.includes(entry.id));
+      const selectedEntries = entries.filter((entry) => entryIds.includes(entry.id));
       
       if (selectedEntries.length === 0) {
         throw new Error('No valid recipients found');
@@ -89,7 +94,21 @@ export const applicationService = {
         throw new Error('No valid email addresses found for selected recipients');
       }
 
+      // Load custom email template for this agent
+      const emailTemplate = await emailTemplateService.getEmailTemplate(agentId);
+      
+      // Format property address for email
+      const propertyAddress = emailTemplateService.formatPropertyAddress(event.property);
+
       // TODO: Implement actual email sending via Edge Function or external service
+      // For each recipient, replace template placeholders and send email:
+      // const emailBody = emailTemplateService.replaceTemplatePlaceholders(emailTemplate, {
+      //   tenantName: recipient.name,
+      //   propertyAddress: propertyAddress,
+      //   agentName: agentName
+      // });
+      // await sendEmail(recipient.email, emailBody, applicationUrl);
+      
       // For now, we'll just record the applications in the database
       
       // Insert application records

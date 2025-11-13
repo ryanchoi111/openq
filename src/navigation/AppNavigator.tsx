@@ -42,6 +42,7 @@ import EventHistoryScreen from '../screens/agent/EventHistoryScreen';
 import CompletedEventWaitlistScreen from '../screens/agent/CompletedEventWaitlistScreen';
 import ProfileScreen from '../screens/agent/ProfileScreen';
 import SelectTenantsScreen from '../screens/agent/SelectTenantsScreen';
+import EditEmailTemplateScreen from '../screens/agent/EditEmailTemplateScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -250,6 +251,11 @@ const AgentNavigator = () => {
         name="SelectTenants"
         component={SelectTenantsScreen}
         options={{ title: 'Select Recipients' }}
+      />
+      <AgentStack.Screen
+        name="EditEmailTemplate"
+        component={EditEmailTemplateScreen}
+        options={{ title: 'Edit Email Template' }}
       />
     </AgentStack.Navigator>
   );

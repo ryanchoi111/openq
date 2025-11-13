@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS public.waitlist_entries (
   user_id UUID REFERENCES public.users(id) ON DELETE SET NULL, -- Null for guests
   guest_name TEXT, -- For guest users
   guest_phone TEXT, -- For guest users
-  guest_email TEXT, -- Optional: for guest users
+  guest_email TEXT, -- For guest users (required in app)
   position INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'touring', 'completed', 'skipped', 'no-show')),
   joined_at TIMESTAMPTZ DEFAULT NOW(),

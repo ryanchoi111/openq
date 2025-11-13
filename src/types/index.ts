@@ -21,7 +21,7 @@ export interface GuestUser {
   id: string;
   name: string;
   phone: string;
-  email?: string;
+  email: string;
   role: 'guest';
 }
 
@@ -64,7 +64,7 @@ export interface WaitlistEntry {
   user_id?: string; // Null for guests
   guest_name?: string;
   guest_phone?: string;
-  guest_email?: string;
+  guest_email?: string; // Required for guests, populated when user_id is null
   position: number;
   status: 'waiting' | 'touring' | 'completed' | 'skipped' | 'no-show';
   joined_at: string;

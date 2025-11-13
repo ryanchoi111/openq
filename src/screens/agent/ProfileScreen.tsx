@@ -211,7 +211,9 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
           <View style={styles.infoCard}>
             <Text style={styles.label}>Role</Text>
-            <Text style={styles.value}>{user.role}</Text>
+            <Text style={styles.value}>
+              {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+            </Text>
           </View>
         </View>
 
@@ -274,6 +276,16 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                 </>
               )}
             </View>
+
+            {/* Edit Email Template Button */}
+            <TouchableOpacity
+              style={styles.emailTemplateButton}
+              onPress={() => navigation.navigate('EditEmailTemplate')}
+            >
+              <Ionicons name="mail-outline" size={20} color="#2563eb" />
+              <Text style={styles.emailTemplateButtonText}>Edit Email Template</Text>
+              <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -425,6 +437,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#2563eb',
+  },
+  emailTemplateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginTop: 16,
+  },
+  emailTemplateButtonText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
   },
   signOutButton: {
     backgroundColor: '#ef4444',

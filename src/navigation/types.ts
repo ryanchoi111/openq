@@ -36,4 +36,5 @@ export type AgentStackParamList = {
   CompletedEventWaitlist: { eventId: string };
   Profile: undefined;
   SelectTenants: { eventId: string };
+  EditEmailTemplate: undefined;
 };

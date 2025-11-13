@@ -8,7 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 type Props = NativeStackScreenProps<TenantStackParamList, 'TenantHome'>;
 
 const TenantHomeScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, isGuest, signOut } = useAuth();
+  const { user, isGuest } = useAuth();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -30,13 +30,6 @@ const TenantHomeScreen: React.FC<Props> = ({ navigation }) => {
           onPress={() => navigation.navigate('TenantHistory')}
         >
           <Text style={styles.secondaryButtonText}>View My History</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, styles.secondaryButton]}
-          onPress={signOut}
-        >
-          <Text style={styles.secondaryButtonText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -39,9 +39,14 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
+    if (!email.trim()) {
+      Alert.alert('Required', 'Please enter your email address');
+      return;
+    }
+
     try {
       setLoading(true);
-      await signInAsGuest(name.trim(), phone.trim(), email.trim() || undefined);
+      await signInAsGuest(name.trim(), phone.trim(), email.trim());
       // Navigation handled by AppNavigator based on auth state
     } catch (error) {
       Alert.alert('Error', 'Failed to join. Please try again.');
@@ -93,7 +98,9 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email (Optional)</Text>
+            <Text style={styles.label}>
+              Email <Text style={styles.required}>*</Text>
+            </Text>
             <TextInput
               style={styles.input}
               value={email}
