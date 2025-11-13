@@ -21,6 +21,19 @@ export const eventService = {
     try {
       console.log('[createEvent] Creating event for agent:', params.agentId);
       
+      // Backend validation: Check if property already has an active or scheduled event
+      const { data: existingEvents, error: checkError } = await supabase
+        .from('open_house_events')
+        .select('id, status')
+        .eq('property_id', params.propertyId)
+        .in('status', ['active', 'scheduled']);
+      
+      if (checkError) throw checkError;
+      
+      if (existingEvents && existingEvents.length > 0) {
+        throw new Error('This property already has an active or scheduled open house event. Please complete or cancel the existing event first.');
+      }
+      
       // Determine initial status based on start time
       const now = new Date().toISOString();
       const initialStatus = params.startTime > now ? 'scheduled' : 'active';

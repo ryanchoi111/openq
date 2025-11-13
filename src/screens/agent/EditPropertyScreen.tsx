@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -14,10 +15,12 @@ import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { propertyService } from '../../services/propertyService';
 
-type Props = NativeStackScreenProps<AgentStackParamList, 'CreateProperty'>;
+type Props = NativeStackScreenProps<AgentStackParamList, 'EditProperty'>;
 
-const CreatePropertyScreen: React.FC<Props> = ({ navigation }) => {
+const EditPropertyScreen: React.FC<Props> = ({ navigation, route }) => {
+  const { propertyId } = route.params;
   const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [address, setAddress] = useState('');
   const [address2, setAddress2] = useState('');
   const [city, setCity] = useState('');
@@ -28,9 +31,43 @@ const CreatePropertyScreen: React.FC<Props> = ({ navigation }) => {
   const [rent, setRent] = useState('');
   const [description, setDescription] = useState('');
 
-  const handleCreate = async () => {
+  useEffect(() => {
+    loadProperty();
+  }, [propertyId]);
+
+  const loadProperty = async () => {
+    try {
+      setLoading(true);
+      const property = await propertyService.getProperty(propertyId);
+      
+      if (!property) {
+        Alert.alert('Error', 'Property not found');
+        navigation.goBack();
+        return;
+      }
+
+      // Pre-fill form with existing data
+      setAddress(property.address || '');
+      setAddress2(property.address2 || '');
+      setCity(property.city || '');
+      setState(property.state || '');
+      setZip(property.zip || '');
+      setBedrooms(property.bedrooms?.toString() || '');
+      setBathrooms(property.bathrooms?.toString() || '');
+      setRent(property.rent?.toString() || '');
+      setDescription(property.description || '');
+    } catch (error: any) {
+      console.error('Error loading property:', error);
+      Alert.alert('Error', 'Failed to load property');
+      navigation.goBack();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdate = async () => {
     if (!user?.id) {
-      Alert.alert('Error', 'You must be signed in to create a property');
+      Alert.alert('Error', 'You must be signed in to update a property');
       return;
     }
 
@@ -85,26 +122,60 @@ const CreatePropertyScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     try {
-      await propertyService.createProperty({
-        agentId: user.id,
+      await propertyService.updateProperty(propertyId, {
         address: address.trim(),
-        address2: address2.trim(),
+        address2: address2.trim() || undefined,
         city: city.trim(),
         state: state.trim(),
         zip: zip.trim(),
         bedrooms: bedroomsNum,
         bathrooms: bathroomsNum,
         rent: rentNum,
-        description: description.trim(),
+        description: description.trim() || undefined,
       });
 
-      Alert.alert('Success', 'Property created successfully!');
+      Alert.alert('Success', 'Property updated successfully!');
       navigation.goBack();
     } catch (error: any) {
-      console.error('Error creating property:', error);
-      Alert.alert('Error', error.message || 'Failed to create property');
+      console.error('Error updating property:', error);
+      Alert.alert('Error', error.message || 'Failed to update property');
     }
   };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Property',
+      'Are you sure you want to delete this property? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await propertyService.deleteProperty(propertyId);
+              Alert.alert('Success', 'Property deleted successfully!');
+              navigation.goBack();
+            } catch (error: any) {
+              console.error('Error deleting property:', error);
+              Alert.alert('Error', error.message || 'Failed to delete property');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563eb" />
+          <Text style={styles.loadingText}>Loading property...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -189,8 +260,12 @@ const CreatePropertyScreen: React.FC<Props> = ({ navigation }) => {
           numberOfLines={4}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleCreate}>
-          <Text style={styles.buttonText}>Create Property</Text>
+        <TouchableOpacity style={styles.button} onPress={handleUpdate}>
+          <Text style={styles.buttonText}>Update Property</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+          <Text style={styles.deleteButtonText}>Delete Property</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -201,6 +276,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 20 },
   scrollContent: { paddingBottom: 40 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#64748b',
+  },
   label: {
     fontSize: 14,
     fontWeight: '600',
@@ -217,8 +302,33 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   textArea: { height: 100, textAlignVertical: 'top' },
-  button: { backgroundColor: '#2563eb', padding: 16, borderRadius: 8, marginTop: 8 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  button: { 
+    backgroundColor: '#2563eb', 
+    padding: 16, 
+    borderRadius: 8, 
+    marginTop: 8 
+  },
+  buttonText: { 
+    color: '#fff', 
+    fontSize: 16, 
+    fontWeight: '600', 
+    textAlign: 'center' 
+  },
+  deleteButton: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 2,
+    borderColor: '#ef4444',
+  },
+  deleteButtonText: {
+    color: '#ef4444',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });
 
-export default CreatePropertyScreen;
+export default EditPropertyScreen;
+

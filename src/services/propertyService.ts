@@ -94,6 +94,49 @@ export const propertyService = {
   },
 
   /**
+   * Get properties available for creating new open house events
+   * Excludes properties that already have active or scheduled events
+   */
+  async getAvailablePropertiesForEvent(agentId: string): Promise<Property[]> {
+    try {
+      // Get all properties for the agent
+      const { data: properties, error: propertiesError } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('agent_id', agentId)
+        .order('created_at', { ascending: false });
+
+      if (propertiesError) throw propertiesError;
+
+      // Get all active and scheduled events for the agent
+      const { data: activeEvents, error: eventsError } = await supabase
+        .from('open_house_events')
+        .select('property_id')
+        .eq('agent_id', agentId)
+        .in('status', ['active', 'scheduled']);
+
+      if (eventsError) throw eventsError;
+
+      // Create a set of property IDs that have active/scheduled events
+      const busyPropertyIds = new Set(
+        activeEvents?.map((event: any) => event.property_id) || []
+      );
+
+      // Filter out properties with active/scheduled events
+      const availableProperties = properties?.filter(
+        (property: Property) => !busyPropertyIds.has(property.id)
+      ) || [];
+
+      console.log(`[getAvailablePropertiesForEvent] Total properties: ${properties?.length}, Busy: ${busyPropertyIds.size}, Available: ${availableProperties.length}`);
+
+      return availableProperties as Property[];
+    } catch (error) {
+      console.error('Error fetching available properties:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Update property
    */
   async updateProperty(

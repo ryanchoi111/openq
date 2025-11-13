@@ -58,7 +58,16 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.qrButton}
-          onPress={() => navigation.navigate('QRDisplay', { eventId })}
+          onPress={() => {
+            // Reset navigation stack so back button goes to AgentHome
+            navigation.reset({
+              index: 1,
+              routes: [
+                { name: 'AgentHome' },
+                { name: 'QRDisplay', params: { eventId } },
+              ],
+            });
+          }}
         >
           <Text style={styles.qrButtonText}>Show QR Code</Text>
         </TouchableOpacity>

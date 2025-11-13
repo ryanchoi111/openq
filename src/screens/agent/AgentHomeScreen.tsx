@@ -103,16 +103,13 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <ScrollView
         style={styles.content}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <Text style={styles.title}>Agent Dashboard</Text>
-        <Text style={styles.subtitle}>Welcome, {user?.name}</Text>
-
         {/* Scheduled Open Houses Section */}
         {scheduledEvents.length > 0 && (
           <>
@@ -178,14 +175,24 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={styles.deleteButtonText}>🗑️</Text>
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={() =>
-                    navigation.navigate('EventDashboard', { eventId: event.id })
-                  }
-                >
-                  <Text style={styles.buttonText}>Manage Queue</Text>
-                </TouchableOpacity>
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity
+                    style={styles.buttonHalf}
+                    onPress={() =>
+                      navigation.navigate('EventDashboard', { eventId: event.id })
+                    }
+                  >
+                    <Text style={styles.buttonText}>Manage Queue</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.buttonHalf}
+                    onPress={() =>
+                      navigation.navigate('SelectTenants', { eventId: event.id })
+                    }
+                  >
+                    <Text style={styles.buttonText}>Send Application</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ))}
           </>
@@ -211,12 +218,6 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.actionButtonText}>Create Open House</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('EventHistory')}
-          >
-            <Text style={styles.actionButtonText}>View History</Text>
-          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
@@ -230,9 +231,7 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { flex: 1, padding: 20 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#1e293b' },
-  subtitle: { fontSize: 16, color: '#64748b', marginTop: 4, marginBottom: 24 },
+  content: { flex: 1, padding: 20, paddingTop: 12 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -265,7 +264,18 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 20,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   button: {
+    backgroundColor: '#2563eb',
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  buttonHalf: {
+    flex: 1,
     backgroundColor: '#2563eb',
     padding: 14,
     borderRadius: 8,

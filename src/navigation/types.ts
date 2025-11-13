@@ -34,4 +34,6 @@ export type AgentStackParamList = {
   QRDisplay: { eventId: string };
   EventHistory: undefined;
   CompletedEventWaitlist: { eventId: string };
+  Profile: undefined;
+  SelectTenants: { eventId: string };
 };

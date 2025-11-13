@@ -13,7 +13,7 @@ import { OpenHouseEvent } from '../../types';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'QRDisplay'>;
 
-const QRDisplayScreen: React.FC<Props> = ({ route }) => {
+const QRDisplayScreen: React.FC<Props> = ({ route, navigation }) => {
   const { eventId } = route.params;
   const [event, setEvent] = useState<OpenHouseEvent | null>(null);
 

@@ -41,7 +41,10 @@ const PropertiesScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         }
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card}>
+          <TouchableOpacity 
+            style={styles.card}
+            onPress={() => navigation.navigate('EditProperty', { propertyId: item.id })}
+          >
             <Text style={styles.address}>
               {item.address}
               {item.address2 ? ` ${item.address2}` : ''}

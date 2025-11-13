@@ -12,6 +12,8 @@ export interface User {
   phone?: string;
   name: string;
   role: UserRole;
+  profile_picture?: string;
+  housing_application_url?: string;
   created_at: string;
 }
 

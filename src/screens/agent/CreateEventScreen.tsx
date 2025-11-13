@@ -46,8 +46,16 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const loadProperties = async () => {
     if (!user?.id) return;
-    const data = await propertyService.getAgentProperties(user.id);
+    // Only load properties that don't have active or scheduled open house events
+    const data = await propertyService.getAvailablePropertiesForEvent(user.id);
     setProperties(data);
+    
+    if (data.length === 0) {
+      Alert.alert(
+        'No Available Properties',
+        'All your properties already have active or scheduled open house events. Complete or cancel existing events first.'
+      );
+    }
   };
 
   const handleCreate = async () => {
@@ -80,7 +88,14 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
         navigation.navigate('AgentHome');
       } else {
         Alert.alert('Success', 'Open house created and is now active!');
-        navigation.navigate('EventDashboard', { eventId: event.id });
+        // Reset navigation stack so back button goes to AgentHome
+        navigation.reset({
+          index: 1,
+          routes: [
+            { name: 'AgentHome' },
+            { name: 'EventDashboard', params: { eventId: event.id } },
+          ],
+        });
       }
     } catch (error: any) {
       console.error('[CreateEventScreen] Error:', error);
@@ -137,11 +152,22 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <ScrollView style={styles.content}>
-        <Text style={styles.title}>Create Open House</Text>
-        <Text style={styles.subtitle}>Select a property and schedule times</Text>
-
-        {properties.map((property) => (
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {properties.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateTitle}>No Available Properties</Text>
+            <Text style={styles.emptyStateText}>
+              All your properties currently have active or scheduled open house events.
+            </Text>
+            <Text style={styles.emptyStateText}>
+              Complete or cancel existing events to create new ones.
+            </Text>
+          </View>
+        ) : (
+          properties.map((property) => (
           <TouchableOpacity
             key={property.id}
             style={[
@@ -158,7 +184,7 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
               {property.bedrooms}bd • {property.bathrooms}ba • ${property.rent}/mo
             </Text>
           </TouchableOpacity>
-        ))}
+        )))}
 
         {/* Date/Time Selection Section */}
         <View style={styles.dateTimeSection}>
@@ -280,8 +306,26 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   content: { padding: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 },
-  subtitle: { fontSize: 16, color: '#64748b', marginBottom: 20 },
+  scrollContent: { paddingBottom: 40 },
+  emptyState: {
+    backgroundColor: '#fff',
+    padding: 24,
+    borderRadius: 12,
+    marginVertical: 20,
+    alignItems: 'center',
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 12,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   propertyCard: {
     backgroundColor: '#fff',
     padding: 16,

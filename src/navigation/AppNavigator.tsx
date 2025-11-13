@@ -6,7 +6,9 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -32,15 +34,19 @@ import TenantHistoryScreen from '../screens/tenant/TenantHistoryScreen';
 import AgentHomeScreen from '../screens/agent/AgentHomeScreen';
 import PropertiesScreen from '../screens/agent/PropertiesScreen';
 import CreatePropertyScreen from '../screens/agent/CreatePropertyScreen';
+import EditPropertyScreen from '../screens/agent/EditPropertyScreen';
 import CreateEventScreen from '../screens/agent/CreateEventScreen';
 import EventDashboardScreen from '../screens/agent/EventDashboardScreen';
 import QRDisplayScreen from '../screens/agent/QRDisplayScreen';
 import EventHistoryScreen from '../screens/agent/EventHistoryScreen';
 import CompletedEventWaitlistScreen from '../screens/agent/CompletedEventWaitlistScreen';
+import ProfileScreen from '../screens/agent/ProfileScreen';
+import SelectTenantsScreen from '../screens/agent/SelectTenantsScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const TenantStack = createNativeStackNavigator<TenantStackParamList>();
+const AgentTabs = createBottomTabNavigator();
 const AgentStack = createNativeStackNavigator<AgentStackParamList>();
 
 // Auth Navigator
@@ -95,7 +101,106 @@ const TenantNavigator = () => {
   );
 };
 
-// Agent Navigator
+// Agent Tab Navigator (Main Screens with Bottom Tabs)
+const AgentTabNavigator = () => {
+  return (
+    <AgentTabs.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: '#2563eb',
+        tabBarInactiveTintColor: '#64748b',
+        tabBarStyle: {
+          backgroundColor: '#fff',
+          borderTopWidth: 1,
+          borderTopColor: '#e2e8f0',
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
+        headerStyle: {
+          backgroundColor: '#fff',
+          borderBottomWidth: 1,
+          borderBottomColor: '#e2e8f0',
+          elevation: 0,
+          shadowOpacity: 0,
+        },
+        headerTitleStyle: {
+          fontWeight: '700',
+          fontSize: 24,
+          color: '#1e293b',
+        },
+        headerTitleAlign: 'left',
+        headerLeftContainerStyle: {
+          paddingLeft: 4,
+        },
+        headerTitleContainerStyle: {
+          paddingLeft: 0,
+        },
+      }}
+    >
+      <AgentTabs.Screen
+        name="AgentHome"
+        component={AgentHomeScreen as any}
+        options={{
+          headerTitle: 'OpenQ',
+          tabBarLabel: '',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home" size={size} color={color} />
+          ),
+        }}
+      />
+      <AgentTabs.Screen
+        name="Properties"
+        component={PropertiesScreen as any}
+        options={{
+          headerTitle: 'OpenQ',
+          tabBarLabel: '',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="business" size={size} color={color} />
+          ),
+        }}
+      />
+      <AgentTabs.Screen
+        name="CreateEvent"
+        component={CreateEventScreen as any}
+        options={{
+          headerTitle: 'OpenQ',
+          tabBarLabel: '',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="add-circle" size={size} color={color} />
+          ),
+        }}
+      />
+      <AgentTabs.Screen
+        name="EventHistory"
+        component={EventHistoryScreen as any}
+        options={{
+          headerTitle: 'OpenQ',
+          tabBarLabel: '',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time" size={size} color={color} />
+          ),
+        }}
+      />
+      <AgentTabs.Screen
+        name="Profile"
+        component={ProfileScreen as any}
+        options={{
+          headerTitle: 'OpenQ',
+          tabBarLabel: '',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-circle" size={size} color={color} />
+          ),
+        }}
+      />
+    </AgentTabs.Navigator>
+  );
+};
+
+// Agent Navigator (Includes Tabs + Modal/Detail Screens)
 const AgentNavigator = () => {
   return (
     <AgentStack.Navigator
@@ -113,13 +218,8 @@ const AgentNavigator = () => {
     >
       <AgentStack.Screen
         name="AgentHome"
-        component={AgentHomeScreen}
+        component={AgentTabNavigator}
         options={{ headerShown: false }}
-      />
-      <AgentStack.Screen
-        name="Properties"
-        component={PropertiesScreen}
-        options={{ title: 'My Properties' }}
       />
       <AgentStack.Screen
         name="CreateProperty"
@@ -127,9 +227,9 @@ const AgentNavigator = () => {
         options={{ title: 'Add Property' }}
       />
       <AgentStack.Screen
-        name="CreateEvent"
-        component={CreateEventScreen}
-        options={{ title: 'Create Open House' }}
+        name="EditProperty"
+        component={EditPropertyScreen}
+        options={{ title: 'Edit Property' }}
       />
       <AgentStack.Screen
         name="EventDashboard"
@@ -142,14 +242,14 @@ const AgentNavigator = () => {
         options={{ title: 'QR Code' }}
       />
       <AgentStack.Screen
-        name="EventHistory"
-        component={EventHistoryScreen}
-        options={{ title: 'Event History' }}
-      />
-      <AgentStack.Screen
         name="CompletedEventWaitlist"
         component={CompletedEventWaitlistScreen}
         options={{ title: 'Event Waitlist' }}
+      />
+      <AgentStack.Screen
+        name="SelectTenants"
+        component={SelectTenantsScreen}
+        options={{ title: 'Select Recipients' }}
       />
     </AgentStack.Navigator>
   );

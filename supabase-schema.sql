@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS public.users (
   phone TEXT,
   name TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('agent', 'tenant')),
+  profile_picture TEXT,
+  housing_application_url TEXT, -- For agents: URL to uploaded housing application PDF
   onesignal_player_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -322,3 +324,59 @@ BEGIN
   RAISE NOTICE 'Repaired positions for event %', p_event_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
+-- STORAGE BUCKETS AND POLICIES
+-- =====================================================
+
+-- Create profile-pictures storage bucket
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('profile-pictures', 'profile-pictures', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Profile pictures storage policies
+CREATE POLICY IF NOT EXISTS "Allow authenticated users to upload profile pictures"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'profile-pictures');
+
+CREATE POLICY IF NOT EXISTS "Allow public read access to profile pictures"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'profile-pictures');
+
+CREATE POLICY IF NOT EXISTS "Allow authenticated users to update own profile pictures"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (bucket_id = 'profile-pictures');
+
+CREATE POLICY IF NOT EXISTS "Allow authenticated users to delete own profile pictures"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id = 'profile-pictures');
+
+-- Create housing-applications storage bucket
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('housing-applications', 'housing-applications', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Housing applications storage policies
+CREATE POLICY IF NOT EXISTS "Allow authenticated users to upload housing applications"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'housing-applications');
+
+CREATE POLICY IF NOT EXISTS "Allow public read access to housing applications"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'housing-applications');
+
+CREATE POLICY IF NOT EXISTS "Allow authenticated users to update housing applications"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (bucket_id = 'housing-applications');
+
+CREATE POLICY IF NOT EXISTS "Allow authenticated users to delete housing applications"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id = 'housing-applications');
