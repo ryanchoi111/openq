@@ -85,14 +85,14 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
       // Determine if scheduled or active
       if (startDate > now) {
         Alert.alert('Success', 'Open house scheduled successfully!');
-        navigation.navigate('AgentHome');
+        navigation.navigate('AgentTabs');
       } else {
         Alert.alert('Success', 'Open house created and is now active!');
         // Reset navigation stack so back button goes to AgentHome
         navigation.reset({
           index: 1,
           routes: [
-            { name: 'AgentHome' },
+            { name: 'AgentTabs' },
             { name: 'EventDashboard', params: { eventId: event.id } },
           ],
         });

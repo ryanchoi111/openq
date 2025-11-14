@@ -40,6 +40,7 @@ import EventDashboardScreen from '../screens/agent/EventDashboardScreen';
 import QRDisplayScreen from '../screens/agent/QRDisplayScreen';
 import EventHistoryScreen from '../screens/agent/EventHistoryScreen';
 import CompletedEventWaitlistScreen from '../screens/agent/CompletedEventWaitlistScreen';
+import CompletedToursScreen from '../screens/agent/CompletedToursScreen';
 import ProfileScreen from '../screens/agent/ProfileScreen';
 import SelectTenantsScreen from '../screens/agent/SelectTenantsScreen';
 import EditEmailTemplateScreen from '../screens/agent/EditEmailTemplateScreen';
@@ -218,7 +219,7 @@ const AgentNavigator = () => {
       }}
     >
       <AgentStack.Screen
-        name="AgentHome"
+        name="AgentTabs"
         component={AgentTabNavigator}
         options={{ headerShown: false }}
       />
@@ -241,6 +242,11 @@ const AgentNavigator = () => {
         name="QRDisplay"
         component={QRDisplayScreen}
         options={{ title: 'QR Code' }}
+      />
+      <AgentStack.Screen
+        name="CompletedTours"
+        component={CompletedToursScreen}
+        options={{ title: 'Completed Tours' }}
       />
       <AgentStack.Screen
         name="CompletedEventWaitlist"

@@ -25,16 +25,18 @@ export type TenantStackParamList = {
 };
 
 export type AgentStackParamList = {
-  AgentHome: undefined;
-  Properties: undefined;
+  AgentTabs: undefined; // Container for tab navigator
+  AgentHome: undefined; // Home tab (accessible from stack for navigation.reset)
+  Properties: undefined; // Properties tab
+  CreateEvent: { propertyId?: string }; // Create event tab (accessible from stack)
+  EventHistory: undefined; // History tab
+  Profile: undefined; // Profile tab
   CreateProperty: undefined;
   EditProperty: { propertyId: string };
-  CreateEvent: { propertyId?: string };
   EventDashboard: { eventId: string };
   QRDisplay: { eventId: string };
-  EventHistory: undefined;
+  CompletedTours: { eventId: string };
   CompletedEventWaitlist: { eventId: string };
-  Profile: undefined;
   SelectTenants: { eventId: string };
   EditEmailTemplate: undefined;
 };

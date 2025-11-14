@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../config/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WaitlistEntry, GuestUser, User } from '../types';
 
 interface JoinWaitlistParams {
@@ -84,6 +85,20 @@ export const waitlistService = {
 
       if (error) throw error;
 
+      // For guests, store the entry ID in AsyncStorage so they can view their history
+      if (user.role === 'guest') {
+        try {
+          const key = `@guest_waitlist_history:${user.id}`;
+          const existing = await AsyncStorage.getItem(key);
+          const entries = existing ? JSON.parse(existing) : [];
+          entries.push(data.id);
+          await AsyncStorage.setItem(key, JSON.stringify(entries));
+        } catch (storageError) {
+          console.error('Error storing guest history:', storageError);
+          // Don't throw - entry was created successfully
+        }
+      }
+
       return data as WaitlistEntry;
     } catch (error) {
       console.error('Error joining waitlist:', error);
@@ -114,8 +129,56 @@ export const waitlistService = {
   /**
    * Get all waitlist entries for a specific user/tenant with event details
    */
-  async getUserWaitlistHistory(userId: string): Promise<any[]> {
+  async getUserWaitlistHistory(userId: string, isGuest: boolean = false): Promise<any[]> {
     try {
+      // For guests, retrieve entry IDs from AsyncStorage
+      if (isGuest) {
+        const key = `@guest_waitlist_history:${userId}`;
+        const storedEntries = await AsyncStorage.getItem(key);
+        
+        if (!storedEntries) {
+          console.log('[getUserWaitlistHistory] No stored entries for guest');
+          return [];
+        }
+
+        const entryIds = JSON.parse(storedEntries);
+        
+        if (!entryIds || entryIds.length === 0) {
+          console.log('[getUserWaitlistHistory] No entry IDs found for guest');
+          return [];
+        }
+
+        // Fetch full entry details from database
+        const { data, error } = await supabase
+          .from('waitlist_entries')
+          .select(`
+            *,
+            event:open_house_events (
+              start_time,
+              end_time,
+              status,
+              property:properties (
+                address,
+                address2,
+                city,
+                state,
+                zip
+              )
+            )
+          `)
+          .in('id', entryIds)
+          .order('joined_at', { ascending: false });
+
+        if (error) {
+          console.error('[getUserWaitlistHistory] Error fetching guest entries:', error);
+          return [];
+        }
+
+        console.log(`[getUserWaitlistHistory] Found ${data?.length || 0} entries for guest`);
+        return data || [];
+      }
+
+      // For authenticated users, query by user_id
       const { data, error } = await supabase
         .from('waitlist_entries')
         .select(`
@@ -211,6 +274,39 @@ export const waitlistService = {
       return data as WaitlistEntry;
     } catch (error) {
       console.error('Error expressing interest:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Toggle interest in property (mark/unmark as interested)
+   * Uses RPC function for guests to bypass RLS, direct update for authenticated users
+   */
+  async toggleInterest(entryId: string, interested: boolean): Promise<WaitlistEntry> {
+    try {
+      // Try to use the RPC function for guests first
+      const { data, error } = await supabase
+        .rpc('update_guest_interest', {
+          p_entry_id: entryId,
+          p_interested: interested,
+        });
+
+      if (error) {
+        // If RPC fails (likely an authenticated user), try direct update
+        const { data: directData, error: directError } = await supabase
+          .from('waitlist_entries')
+          .update({ expressed_interest: interested })
+          .eq('id', entryId)
+          .select()
+          .single();
+        
+        if (directError) throw directError;
+        return directData as WaitlistEntry;
+      }
+
+      return data as WaitlistEntry;
+    } catch (error) {
+      console.error('Error toggling interest:', error);
       throw error;
     }
   },

@@ -126,7 +126,8 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                 Array.from(selectedIds),
                 applicationUrl,
                 user.id,
-                user.name
+                user.name,
+                user.email
               );
               Alert.alert(
                 'Success',
@@ -203,6 +204,12 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                       <Ionicons name="checkmark-circle" size={32} color="#2563eb" />
                     </View>
                   )}
+                  {entry.expressed_interest && (
+                    <View style={styles.interestedBadge}>
+                      <Ionicons name="star" size={18} color="#fbbf24" />
+                      <Text style={styles.interestedText}>Interested</Text>
+                    </View>
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -268,8 +275,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -328,6 +335,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
+  },
+  interestedBadge: {
+    position: 'absolute',
+    top: 47,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    borderRadius: 12,
+    gap: 6,
+  },
+  interestedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#92400e',
   },
   footer: {
     padding: 20,

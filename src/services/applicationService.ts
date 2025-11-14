@@ -18,13 +18,15 @@ export const applicationService = {
    * @param applicationUrl - URL of the housing application document
    * @param agentId - The agent's user ID
    * @param agentName - The agent's name
+   * @param agentEmail - The agent's email address (used as sender)
    */
   async sendApplicationToTenants(
     eventId: string,
     entryIds: string[],
     applicationUrl: string,
     agentId: string,
-    agentName: string
+    agentName: string,
+    agentEmail?: string
   ): Promise<void> {
     try {
       // Get all waitlist entries
@@ -99,17 +101,6 @@ export const applicationService = {
       
       // Format property address for email
       const propertyAddress = emailTemplateService.formatPropertyAddress(event.property);
-
-      // TODO: Implement actual email sending via Edge Function or external service
-      // For each recipient, replace template placeholders and send email:
-      // const emailBody = emailTemplateService.replaceTemplatePlaceholders(emailTemplate, {
-      //   tenantName: recipient.name,
-      //   propertyAddress: propertyAddress,
-      //   agentName: agentName
-      // });
-      // await sendEmail(recipient.email, emailBody, applicationUrl);
-      
-      // For now, we'll just record the applications in the database
       
       // Insert application records
       const applicationRecords = recipients.map(recipient => ({
@@ -136,20 +127,47 @@ export const applicationService = {
       
       if (updateError) throw updateError;
 
-      // TODO: Call Edge Function to send actual emails
-      // Example structure:
-      // await supabase.functions.invoke('send-application-email', {
-      //   body: {
-      //     recipients: recipients.map(r => ({
-      //       email: r.email,
-      //       name: r.name,
-      //     })),
-      //     propertyAddress: `${event.property.address}, ${event.property.city}, ${event.property.state}`,
-      //     applicationUrl,
-      //   },
-      // });
+      // Send actual emails via Edge Function
+      try {
+        // Prepare personalized emails for each recipient
+        const emailsToSend = recipients.map(recipient => {
+          // Replace placeholders with actual data for this recipient
+          const personalizedEmailBody = emailTemplateService.replaceTemplatePlaceholders(emailTemplate, {
+            tenantName: recipient.name,
+            propertyAddress,
+            agentName,
+          });
+          
+          return {
+            email: recipient.email!,
+            name: recipient.name,
+            emailBody: personalizedEmailBody,
+          };
+        });
 
-      console.log(`Housing application sent to ${recipients.length} recipient(s)`);
+        const { data, error: functionError } = await supabase.functions.invoke('send-application-email', {
+          body: {
+            recipients: emailsToSend,
+            propertyAddress,
+            applicationUrl,
+            agentName,
+            fromEmail: agentEmail,
+          },
+        });
+
+        if (functionError) {
+          console.error('Error calling email function:', functionError);
+          // Don't throw - applications are recorded even if email fails
+          throw new Error(`Emails failed to send: ${functionError.message}`);
+        }
+
+        console.log('Email sending result:', data);
+        console.log(`Housing application sent to ${recipients.length} recipient(s)`);
+      } catch (emailError) {
+        console.error('Error sending emails:', emailError);
+        // Applications are recorded, but email sending failed
+        throw emailError;
+      }
     } catch (error) {
       console.error('Error sending application:', error);
       throw error;

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { AgentStackParamList } from '../../navigation/types';
 import { waitlistService } from '../../services/waitlistService';
 import { WaitlistEntry } from '../../types';
@@ -35,7 +36,9 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const loadWaitlist = async () => {
     const data = await waitlistService.getWaitlist(eventId);
-    setWaitlist(data);
+    // Filter out completed tours - they should appear in the Completed Tours screen
+    const activeQueue = data.filter((entry) => entry.status !== 'completed');
+    setWaitlist(activeQueue);
   };
 
   const handleCallNext = async () => {
@@ -63,7 +66,7 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
             navigation.reset({
               index: 1,
               routes: [
-                { name: 'AgentHome' },
+                { name: 'AgentTabs' },
                 { name: 'QRDisplay', params: { eventId } },
               ],
             });
@@ -73,6 +76,16 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
         </TouchableOpacity>
         <TouchableOpacity style={styles.callButton} onPress={handleCallNext}>
           <Text style={styles.callButtonText}>Call Next</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.completedToursButtonContainer}>
+        <TouchableOpacity
+          style={styles.completedToursButton}
+          onPress={() => navigation.navigate('CompletedTours', { eventId })}
+        >
+          <Ionicons name="checkmark-done-circle" size={20} color="#10b981" />
+          <Text style={styles.completedToursButtonText}>View Completed Tours</Text>
         </TouchableOpacity>
       </View>
 
@@ -91,6 +104,11 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
                   {item.status}
                 </Text>
               </View>
+              {item.expressed_interest && (
+                <View style={styles.starContainer}>
+                  <Ionicons name="star" size={24} color="#fbbf24" />
+                </View>
+              )}
             </View>
             {item.status === 'touring' && (
               <TouchableOpacity
@@ -99,11 +117,6 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
               >
                 <Text style={styles.completeButtonText}>Complete</Text>
               </TouchableOpacity>
-            )}
-            {item.expressed_interest && (
-              <View style={styles.interestBadge}>
-                <Text style={styles.interestText}>Interested</Text>
-              </View>
             )}
           </View>
         )}
@@ -133,9 +146,22 @@ const styles = StyleSheet.create({
   qrButtonText: { color: '#334155', fontSize: 16, fontWeight: '600', textAlign: 'center' },
   callButton: { flex: 1, backgroundColor: '#2563eb', padding: 14, borderRadius: 8 },
   callButtonText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  completedToursButtonContainer: { paddingHorizontal: 16, paddingBottom: 12 },
+  completedToursButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    backgroundColor: '#fff', 
+    padding: 12, 
+    borderRadius: 8, 
+    borderWidth: 2, 
+    borderColor: '#10b981',
+    gap: 8,
+  },
+  completedToursButtonText: { color: '#10b981', fontSize: 16, fontWeight: '600' },
   list: { padding: 16 },
   card: { backgroundColor: '#fff', padding: 16, borderRadius: 8, marginBottom: 12 },
-  cardContent: { flexDirection: 'row', gap: 12 },
+  cardContent: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   position: { fontSize: 24, fontWeight: 'bold', color: '#2563eb' },
   info: { flex: 1 },
   name: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
@@ -143,8 +169,7 @@ const styles = StyleSheet.create({
   status: { fontSize: 12, fontWeight: '600', marginTop: 4 },
   completeButton: { backgroundColor: '#10b981', padding: 12, borderRadius: 6, marginTop: 12 },
   completeButtonText: { color: '#fff', fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  interestBadge: { backgroundColor: '#fef3c7', padding: 8, borderRadius: 6, marginTop: 8 },
-  interestText: { color: '#92400e', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  starContainer: { marginLeft: 8 },
 });
 
 export default EventDashboardScreen;

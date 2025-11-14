@@ -158,6 +158,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInAsGuest = async (name: string, phone: string, email: string) => {
     try {
+      // Clear any previous guest's history before creating new guest
+      const allKeys = await AsyncStorage.getAllKeys();
+      const guestHistoryKeys = allKeys.filter(key => key.startsWith('@guest_waitlist_history:'));
+      if (guestHistoryKeys.length > 0) {
+        await AsyncStorage.multiRemove(guestHistoryKeys);
+      }
+
       const guestUser: GuestUser = {
         id: `guest_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
         name,
@@ -468,6 +475,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
+      // If signing out a guest, clear their waitlist history
+      if (user?.role === 'guest') {
+        const guestHistoryKey = `@guest_waitlist_history:${user.id}`;
+        await AsyncStorage.removeItem(guestHistoryKey);
+      }
+      
       await supabase.auth.signOut();
       await AsyncStorage.removeItem(GUEST_USER_KEY);
       setUser(null);

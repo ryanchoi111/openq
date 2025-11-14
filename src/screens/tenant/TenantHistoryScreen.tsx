@@ -32,7 +32,7 @@ interface WaitlistEntryWithEvent extends WaitlistEntry {
 }
 
 const TenantHistoryScreen: React.FC<Props> = () => {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const [entries, setEntries] = useState<WaitlistEntryWithEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,7 +47,7 @@ const TenantHistoryScreen: React.FC<Props> = () => {
     }
     try {
       setLoading(true);
-      const userEntries = await waitlistService.getUserWaitlistHistory(user.id);
+      const userEntries = await waitlistService.getUserWaitlistHistory(user.id, isGuest);
       setEntries(userEntries);
     } catch (error) {
       console.error('Error loading tenant history:', error);

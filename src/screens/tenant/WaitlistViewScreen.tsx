@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { TenantStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { waitlistService } from '../../services/waitlistService';
@@ -76,25 +77,20 @@ const WaitlistViewScreen: React.FC<Props> = ({ route, navigation }) => {
     };
   };
 
-  const handleExpressInterest = async () => {
-    if (isGuest) {
-      // Prompt to create account
-      Alert.alert(
-        'Create Account',
-        'Create an account to express interest and receive application forms',
-        [
-          { text: 'Later', style: 'cancel' },
-          { text: 'Create Account', onPress: () => {} }, // TODO: Navigate to account creation
-        ]
-      );
-      return;
-    }
-
+  const handleToggleInterest = async () => {
     try {
-      await waitlistService.expressInterest(entryId);
-      Alert.alert('Success', 'Interest expressed! The agent will send you an application.');
+      const newInterestState = !entry?.expressed_interest;
+      const updatedEntry = await waitlistService.toggleInterest(entryId, newInterestState);
+      setEntry(updatedEntry);
+      
+      Alert.alert(
+        'Success', 
+        newInterestState 
+          ? 'You have marked yourself as interested! The agent has been notified.'
+          : 'Interest unmarked.'
+      );
     } catch (error) {
-      Alert.alert('Error', 'Failed to express interest');
+      Alert.alert('Error', 'Failed to update interest status');
     }
   };
 
@@ -156,22 +152,28 @@ const WaitlistViewScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
           )}
 
-          {entry?.status === 'completed' && !entry.expressed_interest && (
-            <TouchableOpacity
-              style={styles.interestButton}
-              onPress={handleExpressInterest}
-            >
-              <Text style={styles.interestButtonText}>
-                Express Interest
-              </Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[
+              styles.interestButton,
+              entry?.expressed_interest && styles.interestButtonActive
+            ]}
+            onPress={handleToggleInterest}
+          >
+            <Ionicons 
+              name={entry?.expressed_interest ? "star" : "star-outline"} 
+              size={20} 
+              color="#fff" 
+              style={styles.buttonIcon}
+            />
+            <Text style={styles.interestButtonText}>
+              {entry?.expressed_interest ? 'Interested ✓' : 'Mark as Interested'}
+            </Text>
+          </TouchableOpacity>
 
-          {entry?.expressed_interest && (
+          {entry?.expressed_interest && entry.application_sent && (
             <View style={styles.successMessage}>
               <Text style={styles.successText}>
-                ✓ Interest expressed
-                {entry.application_sent && ' • Application sent'}
+                ✓ Application sent by agent
               </Text>
             </View>
           )}
@@ -256,6 +258,15 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  interestButtonActive: {
+    backgroundColor: '#10b981',
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   interestButtonText: {
     color: '#fff',
