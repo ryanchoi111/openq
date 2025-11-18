@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS public.users (
   role TEXT NOT NULL CHECK (role IN ('agent', 'tenant')),
   profile_picture TEXT,
   housing_application_url TEXT, -- For agents: URL to uploaded housing application PDF
-  onesignal_player_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

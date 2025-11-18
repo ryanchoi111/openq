@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { TenantStackParamList } from '../../navigation/types';
@@ -8,7 +8,16 @@ import { useAuth } from '../../contexts/AuthContext';
 type Props = NativeStackScreenProps<TenantStackParamList, 'TenantHome'>;
 
 const TenantHomeScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, isGuest } = useAuth();
+  const { user, isGuest, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      // Navigation handled by AppNavigator based on auth state
+    } catch (error) {
+      Alert.alert('Error', 'Failed to log out. Please try again.');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -31,6 +40,13 @@ const TenantHomeScreen: React.FC<Props> = ({ navigation }) => {
         >
           <Text style={styles.secondaryButtonText}>View My History</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.logoutButton]}
+          onPress={handleLogout}
+        >
+          <Text style={styles.logoutButtonText}>Log Out</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -45,6 +61,8 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   secondaryButton: { backgroundColor: '#f1f5f9' },
   secondaryButtonText: { color: '#334155', fontSize: 16, fontWeight: '600' },
+  logoutButton: { backgroundColor: '#ef4444' },
+  logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
 
 export default TenantHomeScreen;

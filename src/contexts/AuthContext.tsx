@@ -6,8 +6,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import { useAuth as useClerkAuth, useUser as useClerkUser } from '@clerk/clerk-expo';
 import { supabase } from '../config/supabase';
 import { User, GuestUser, UserRole } from '../types';
+
+// Complete OAuth flow in the same window
+WebBrowser.maybeCompleteAuthSession();
 
 interface AuthContextType {
   // Current user state
@@ -25,6 +30,10 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 
+  // OAuth methods
+  signInWithGoogle: (role: UserRole) => Promise<void>;
+  signInWithMicrosoft: (role: UserRole) => Promise<void>;
+
   // Conversion from guest to authenticated
   convertGuestToUser: (email: string, password: string) => Promise<void>;
 
@@ -37,6 +46,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const GUEST_USER_KEY = '@openhouse:guest_user';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const clerkAuth = useClerkAuth();
+  const { user: clerkUser } = useClerkUser();
+  const { isSignedIn, userId, signOut: clerkSignOut } = clerkAuth;
   const [user, setUser] = useState<User | GuestUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,14 +57,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     loadGuestUser();
     loadSession();
-  }, []);
+    // Also sync Clerk user if signed in
+    if (isSignedIn && clerkUser) {
+      syncClerkUserToSupabase(clerkUser);
+    }
+  }, [isSignedIn, clerkUser]);
 
   // Listen to auth state changes
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         setSession(session);
         if (session?.user) {
+          // Check if this is an OAuth sign-in and we need to assign a role
+          const storedRole = await AsyncStorage.getItem('@openhouse:oauth_role');
+          if (storedRole && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+            // Update user profile with the stored role
+            const { error: profileError } = await supabase
+              .from('users')
+              .upsert({
+                id: session.user.id,
+                email: session.user.email,
+                name: session.user.user_metadata?.full_name || 
+                      session.user.user_metadata?.name || 
+                      session.user.email?.split('@')[0] || 
+                      'User',
+                role: storedRole as UserRole,
+                updated_at: new Date().toISOString(),
+              }, {
+                onConflict: 'id',
+              });
+
+            if (profileError) {
+              console.error('Error updating profile with role:', profileError);
+            } else {
+              // Remove the stored role after successful assignment
+              await AsyncStorage.removeItem('@openhouse:oauth_role');
+            }
+          }
+          
           await loadUserProfile(session.user);
         } else {
           // If logged out, check for guest user
@@ -481,6 +524,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await AsyncStorage.removeItem(guestHistoryKey);
       }
       
+      // Sign out from Clerk if signed in
+      if (isSignedIn && clerkSignOut) {
+        await clerkSignOut();
+      }
+      
+      // Also sign out from Supabase (for backward compatibility)
       await supabase.auth.signOut();
       await AsyncStorage.removeItem(GUEST_USER_KEY);
       setUser(null);
@@ -509,14 +558,162 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const syncClerkUserToSupabase = async (clerkUserData: any) => {
+    try {
+      if (!clerkUserData?.id) return;
+
+      // Get stored role or default to 'tenant'
+      const storedRole = await AsyncStorage.getItem('@openhouse:oauth_role');
+      const userRole = storedRole as UserRole || 'tenant';
+
+      // Sync Clerk user to Supabase database
+      const { error } = await supabase
+        .from('users')
+        .upsert({
+          id: clerkUserData.id,
+          email: clerkUserData.primaryEmailAddress?.emailAddress || clerkUserData.emailAddresses?.[0]?.emailAddress || '',
+          name: clerkUserData.firstName && clerkUserData.lastName
+            ? `${clerkUserData.firstName} ${clerkUserData.lastName}`
+            : clerkUserData.firstName || clerkUserData.lastName || clerkUserData.username || 'User',
+          role: userRole,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'id',
+        });
+
+      if (error) {
+        console.error('Error syncing Clerk user to Supabase:', error);
+      } else {
+        // Remove stored role after successful sync
+        if (storedRole) {
+          await AsyncStorage.removeItem('@openhouse:oauth_role');
+        }
+        // Load the user profile from Supabase
+        await loadUserProfileFromSupabase(clerkUserData.id);
+      }
+    } catch (error) {
+      console.error('Error syncing Clerk user:', error);
+    }
+  };
+
+  const loadUserProfileFromSupabase = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error loading user profile:', error);
+        return;
+      }
+
+      if (data) {
+        setUser(data as User);
+      }
+    } catch (error) {
+      console.error('Error loading user profile from Supabase:', error);
+    }
+  };
+
   const refreshUserProfile = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await loadUserProfile(session.user);
+      // If using Clerk, sync Clerk user to Supabase
+      if (isSignedIn && clerkUser) {
+        await syncClerkUserToSupabase(clerkUser);
+      } else {
+        // Fallback to Supabase session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await loadUserProfile(session.user);
+        }
       }
     } catch (error) {
       console.error('Error refreshing user profile:', error);
+      throw error;
+    }
+  };
+
+  const signInWithGoogle = async (role: UserRole) => {
+    try {
+      // Store the role temporarily so we can assign it after OAuth completes
+      await AsyncStorage.setItem('@openhouse:oauth_role', role);
+      
+      const redirectUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/callback`;
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        await AsyncStorage.removeItem('@openhouse:oauth_role');
+        throw error;
+      }
+
+      if (data.url) {
+        // Open OAuth URL in browser - Supabase will handle the callback automatically
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectUrl
+        );
+
+        // If user cancels, clean up
+        if (result.type === 'cancel') {
+          await AsyncStorage.removeItem('@openhouse:oauth_role');
+        }
+        // Success case is handled by onAuthStateChange listener below
+      }
+    } catch (error) {
+      console.error('Error signing in with Google:', error);
+      await AsyncStorage.removeItem('@openhouse:oauth_role');
+      throw error;
+    }
+  };
+
+  const signInWithMicrosoft = async (role: UserRole) => {
+    try {
+      // Store the role temporarily
+      await AsyncStorage.setItem('@openhouse:oauth_role', role);
+      
+      const redirectUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/callback`;
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'azure',
+        options: {
+          redirectTo: redirectUrl,
+          scopes: 'email',
+        },
+      });
+
+      if (error) {
+        await AsyncStorage.removeItem('@openhouse:oauth_role');
+        throw error;
+      }
+
+      if (data.url) {
+        // Open OAuth URL in browser
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectUrl
+        );
+
+        // If user cancels, clean up
+        if (result.type === 'cancel') {
+          await AsyncStorage.removeItem('@openhouse:oauth_role');
+        }
+        // Success case is handled by onAuthStateChange listener below
+      }
+    } catch (error) {
+      console.error('Error signing in with Microsoft:', error);
+      await AsyncStorage.removeItem('@openhouse:oauth_role');
       throw error;
     }
   };
@@ -525,12 +722,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     session,
     isGuest: user?.role === 'guest',
-    isAuthenticated: session !== null && user?.role !== 'guest',
+    isAuthenticated: (isSignedIn || session !== null) && user?.role !== 'guest',
     loading,
     signInAsGuest,
     signUp,
     signIn,
     signOut,
+    signInWithGoogle,
+    signInWithMicrosoft,
     convertGuestToUser,
     refreshUserProfile,
   };

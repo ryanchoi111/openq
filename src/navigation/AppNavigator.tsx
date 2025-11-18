@@ -9,6 +9,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 import { useAuth } from '../contexts/AuthContext';
 import { 
