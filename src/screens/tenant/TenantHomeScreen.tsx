@@ -2,21 +2,40 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { TenantStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
+import { SignOutButton } from '../../components/SignOutButton';
 
 type Props = NativeStackScreenProps<TenantStackParamList, 'TenantHome'>;
 
 const TenantHomeScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, isGuest, signOut } = useAuth();
+  const { user, isGuest, deleteAccount } = useAuth();
 
-  const handleLogout = async () => {
-    try {
-      await signOut();
-      // Navigation handled by AppNavigator based on auth state
-    } catch (error) {
-      Alert.alert('Error', 'Failed to log out. Please try again.');
-    }
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone and will permanently delete all your data.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              Alert.alert('Success', 'Your account has been deleted successfully.');
+            } catch (error: any) {
+              console.error('Error deleting account:', error);
+              Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -41,11 +60,18 @@ const TenantHomeScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.secondaryButtonText}>View My History</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <SignOutButton
           style={[styles.button, styles.logoutButton]}
-          onPress={handleLogout}
+          textStyle={styles.logoutButtonText}
+          text="Log Out"
+        />
+
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDeleteAccount}
         >
-          <Text style={styles.logoutButtonText}>Log Out</Text>
+          <Ionicons name="trash-outline" size={20} color="#dc2626" />
+          <Text style={styles.deleteButtonText}>Delete Account</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -63,6 +89,22 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: '#334155', fontSize: 16, fontWeight: '600' },
   logoutButton: { backgroundColor: '#ef4444' },
   logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#dc2626',
+    backgroundColor: '#fff',
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#dc2626',
+  },
 });
 
 export default TenantHomeScreen;

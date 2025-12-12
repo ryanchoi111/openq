@@ -1,9 +1,10 @@
 /**
  * Authentication Context
- * Handles both guest users (quick join) and authenticated users (Supabase)
+ * Handles guest users and Clerk-authenticated users with Supabase profile sync
  */
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
@@ -11,99 +12,87 @@ import { useAuth as useClerkAuth, useUser as useClerkUser } from '@clerk/clerk-e
 import { supabase } from '../config/supabase';
 import { User, GuestUser, UserRole } from '../types';
 
-// Complete OAuth flow in the same window
 WebBrowser.maybeCompleteAuthSession();
 
 interface AuthContextType {
-  // Current user state
   user: User | GuestUser | null;
   session: Session | null;
   isGuest: boolean;
   isAuthenticated: boolean;
   loading: boolean;
-
-  // Guest auth methods
+  /**
+   * Fast role source used for routing immediately after Clerk OAuth completes.
+   * Prefers:
+   * - Supabase profile role (when loaded)
+   * - Clerk `publicMetadata.role`
+   */
+  effectiveRole: UserRole | null;
   signInAsGuest: (name: string, phone: string, email: string) => Promise<void>;
-
-  // Supabase auth methods
-  signUp: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-
-  // OAuth methods
-  signInWithGoogle: (role: UserRole) => Promise<void>;
-  signInWithMicrosoft: (role: UserRole) => Promise<void>;
-
-  // Conversion from guest to authenticated
-  convertGuestToUser: (email: string, password: string) => Promise<void>;
-
-  // Refresh user profile
+  deleteAccount: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
 const GUEST_USER_KEY = '@openhouse:guest_user';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const clerkAuth = useClerkAuth();
   const { user: clerkUser } = useClerkUser();
-  const { isSignedIn, userId, signOut: clerkSignOut } = clerkAuth;
+  const { isSignedIn, signOut: clerkSignOut } = clerkAuth;
   const [user, setUser] = useState<User | GuestUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [effectiveRole, setEffectiveRole] = useState<UserRole | null>(null);
 
-  // Load guest user from storage on mount
+  const getClerkRole = (clerkUserData: any): UserRole | null => {
+    const role = clerkUserData?.publicMetadata?.role;
+    return (role === 'agent' || role === 'tenant' || role === 'guest') ? role : null;
+  };
+
+  // Initialize auth state
   useEffect(() => {
     loadGuestUser();
     loadSession();
-    // Also sync Clerk user if signed in
     if (isSignedIn && clerkUser) {
-      syncClerkUserToSupabase(clerkUser);
+      syncClerkUserToSupabase(clerkUser).catch(async (e) => {
+        if (e.message?.includes('EMAIL_EXISTS_DIFFERENT_ROLE')) {
+          const existingRole = e.message.split(':')[1];
+          const roleDisplay = existingRole?.charAt(0).toUpperCase() + existingRole?.slice(1) || 'another role';
+          Alert.alert(
+            'Account Already Exists',
+            `This email is already registered as ${roleDisplay}. Please sign in with your existing account or use a different email.`
+          );
+          console.log('[Auth] Role mismatch - signing out');
+          try { if (clerkSignOut) await clerkSignOut(); } catch {}
+          setUser(null);
+          setEffectiveRole(null);
+        }
+      });
     }
   }, [isSignedIn, clerkUser]);
 
-  // Listen to auth state changes
+  // Resolve effective role for routing
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        if (session?.user) {
-          // Check if this is an OAuth sign-in and we need to assign a role
-          const storedRole = await AsyncStorage.getItem('@openhouse:oauth_role');
-          if (storedRole && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-            // Update user profile with the stored role
-            const { error: profileError } = await supabase
-              .from('users')
-              .upsert({
-                id: session.user.id,
-                email: session.user.email,
-                name: session.user.user_metadata?.full_name || 
-                      session.user.user_metadata?.name || 
-                      session.user.email?.split('@')[0] || 
-                      'User',
-                role: storedRole as UserRole,
-                updated_at: new Date().toISOString(),
-              }, {
-                onConflict: 'id',
-              });
+    if (!isSignedIn) {
+      setEffectiveRole(null);
+      return;
+    }
+    if (user && (user as any).role && (user as any).role !== 'guest') {
+      setEffectiveRole((user as any).role as UserRole);
+      return;
+    }
+    const clerkRole = getClerkRole(clerkUser);
+    setEffectiveRole(clerkRole);
+  }, [isSignedIn, clerkUser, user]);
 
-            if (profileError) {
-              console.error('Error updating profile with role:', profileError);
-            } else {
-              // Remove the stored role after successful assignment
-              await AsyncStorage.removeItem('@openhouse:oauth_role');
-            }
-          }
-          
-          await loadUserProfile(session.user);
-        } else {
-          // If logged out, check for guest user
-          await loadGuestUser();
-        }
-      }
-    );
-
+  // Listen to Supabase auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_, session) => {
+      setSession(session);
+      if (session?.user) await loadUserProfile(session.user);
+      else await loadGuestUser();
+    });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -111,9 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
-      if (session?.user) {
-        await loadUserProfile(session.user);
-      }
+      if (session?.user) await loadUserProfile(session.user);
     } catch (error) {
       console.error('Error loading session:', error);
     } finally {
@@ -121,65 +108,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loadUserProfile = async (supabaseUser: SupabaseUser, retries = 10) => {
+  const loadUserProfile = async (supabaseUser: SupabaseUser, retries = 3) => {
     try {
-      // Check for session, but don't throw error immediately - try to get it
-      let session = null;
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      session = currentSession;
-
-      // If no session, try one more time after a short wait
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session && retries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 300));
-        const { data: { session: retrySession } } = await supabase.auth.getSession();
-        session = retrySession;
+        await new Promise(r => setTimeout(r, 300));
+        return loadUserProfile(supabaseUser, retries - 1);
       }
+      if (!session) throw new Error('No active session');
 
-      // If still no session, throw error (but only if we've exhausted retries)
-      if (!session) {
-        if (retries > 0) {
-          // Retry getting session
-          await new Promise(resolve => setTimeout(resolve, 500));
-          return loadUserProfile(supabaseUser, retries - 1);
-        }
-        throw new Error('No active session - please sign in');
-      }
-
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single();
-
+      const { data, error } = await supabase.from('users').select('*').eq('id', supabaseUser.id).single();
       if (error) {
-        // Handle 406 errors (Not Acceptable) - might be a header/session issue
-        if (error.code === 'PGRST301' || error.message?.includes('406')) {
-          // Wait a bit and retry - might be a timing issue with session
-          if (retries > 0) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            return loadUserProfile(supabaseUser, retries - 1);
-          }
-        }
-        // Retry if profile not found yet (trigger might still be running)
         if (retries > 0 && (error.code === 'PGRST116' || error.code === 'PGRST301')) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(r => setTimeout(r, 500));
           return loadUserProfile(supabaseUser, retries - 1);
         }
         throw error;
       }
-
       setUser(data as User);
-      // Clear guest user if exists
       await AsyncStorage.removeItem(GUEST_USER_KEY);
-      
-      // IMPORTANT: Set loading to false after successfully loading user profile
       setLoading(false);
     } catch (error) {
       console.error('Error loading user profile:', error);
-      // Only set loading to false if we've exhausted all retries
-      if (retries === 0) {
-        setLoading(false);
-      }
+      if (retries === 0) setLoading(false);
       throw error;
     }
   };
@@ -187,11 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadGuestUser = async () => {
     try {
       const guestData = await AsyncStorage.getItem(GUEST_USER_KEY);
-      if (guestData) {
-        setUser(JSON.parse(guestData) as GuestUser);
-      } else {
-        setUser(null);
-      }
+      setUser(guestData ? JSON.parse(guestData) as GuestUser : null);
     } catch (error) {
       console.error('Error loading guest user:', error);
     } finally {
@@ -200,336 +147,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signInAsGuest = async (name: string, phone: string, email: string) => {
-    try {
-      // Clear any previous guest's history before creating new guest
-      const allKeys = await AsyncStorage.getAllKeys();
-      const guestHistoryKeys = allKeys.filter(key => key.startsWith('@guest_waitlist_history:'));
-      if (guestHistoryKeys.length > 0) {
-        await AsyncStorage.multiRemove(guestHistoryKeys);
-      }
+    // Clear previous guest history
+    const allKeys = await AsyncStorage.getAllKeys();
+    const guestHistoryKeys = allKeys.filter(key => key.startsWith('@guest_waitlist_history:'));
+    if (guestHistoryKeys.length > 0) await AsyncStorage.multiRemove(guestHistoryKeys);
 
-      const guestUser: GuestUser = {
-        id: `guest_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-        name,
-        phone,
-        email,
-        role: 'guest',
-      };
-
-      await AsyncStorage.setItem(GUEST_USER_KEY, JSON.stringify(guestUser));
-      setUser(guestUser);
-    } catch (error) {
-      console.error('Error signing in as guest:', error);
-      throw error;
-    }
-  };
-
-  const signUp = async (email: string, password: string, name: string, role: UserRole) => {
-    try {
-      // Sign up with Supabase Auth
-      // Note: If email confirmation is disabled in Supabase dashboard,
-      // this will automatically return a session
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: undefined, // Don't redirect for mobile app
-          data: {
-            name,
-            role,
-          },
-        },
-      });
-
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('No user returned from signup');
-
-      // Check if signup returned a session (depends on email confirmation settings)
-      const hasSession = !!authData.session;
-      
-      // If we have a session, set it immediately and ensure it's available
-      if (authData.session) {
-        setSession(authData.session);
-        // Ensure the session is set in the Supabase client
-        await supabase.auth.setSession(authData.session);
-      } else {
-        // No session from signup - wait for it to become available
-        let sessionWaitAttempts = 0;
-        while (!authData.session && sessionWaitAttempts < 5) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session && session.user?.id === authData.user.id) {
-            setSession(session);
-            break;
-          }
-          sessionWaitAttempts++;
-        }
-      }
-
-      // Ensure we have a valid session before attempting profile creation
-      // RLS policies require auth.uid() to be available
-      let currentSession = authData.session;
-      if (!currentSession) {
-        const { data: { session } } = await supabase.auth.getSession();
-        currentSession = session;
-      }
-
-      if (!currentSession) {
-        throw new Error('No session available. Please ensure email confirmation is disabled or confirm your email first.');
-      }
-
-      // For a new account, we know the profile doesn't exist yet
-      // So we'll try to create it directly with retry logic
-      let profileCreated = false;
-      let attempts = 0;
-      const maxAttempts = 10;
-
-      while (!profileCreated && attempts < maxAttempts) {
-        // Wait a moment for auth user to be fully committed (prevents 23503 errors)
-        if (attempts > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } else {
-          // First attempt: shorter wait since signup just completed
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-
-        // Ensure session is still valid before each attempt
-        const { data: { session: verifySession } } = await supabase.auth.getSession();
-        if (!verifySession || verifySession.user?.id !== authData.user.id) {
-          console.log('Session lost, attempting to restore...');
-          if (authData.session) {
-            await supabase.auth.setSession(authData.session);
-          } else {
-            // Wait a bit and retry getting session
-            await new Promise(resolve => setTimeout(resolve, 500));
-            attempts++;
-            continue;
-          }
-        }
-
-        // First, check if profile already exists (might have been created in a previous attempt)
-        const { data: existingCheck } = await supabase
-          .from('users')
-          .select('id')
-          .eq('id', authData.user.id)
-          .single();
-        
-        if (existingCheck) {
-          // Profile already exists - success!
-          profileCreated = true;
-          break;
-        }
-
-        // Try to create the profile directly
-        const { error: profileError, data: insertData } = await supabase
-          .from('users')
-          .insert({
-            id: authData.user.id,
-            email,
-            name,
-            role,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .select();
-
-        if (!profileError) {
-          // Successfully created!
-          profileCreated = true;
-          break;
-        }
-
-        // Log the full error for debugging
-        const errorInfo = {
-          code: profileError.code,
-          message: profileError.message,
-          details: profileError.details,
-          hint: profileError.hint,
-          status: (profileError as any).status,
-          statusCode: (profileError as any).statusCode,
-        };
-        console.log(`Profile creation attempt ${attempts + 1}/${maxAttempts}:`, errorInfo);
-
-        // Check if this is a duplicate/conflict error (409 or 23505)
-        // PostgREST returns 409 for duplicate key violations
-        const isDuplicateError = 
-          profileError.code === '23505' || // PostgreSQL duplicate key
-          profileError.code === 'PGRST116' || // PostgREST not found (but might be conflict)
-          (profileError as any).status === 409 || // HTTP 409 Conflict
-          (profileError as any).statusCode === 409 || // Alternative status code property
-          profileError.message?.toLowerCase().includes('duplicate') ||
-          profileError.message?.toLowerCase().includes('already exists') ||
-          profileError.message?.toLowerCase().includes('unique constraint') ||
-          profileError.details?.toLowerCase().includes('duplicate') ||
-          profileError.details?.toLowerCase().includes('already exists');
-
-        if (isDuplicateError) {
-          // Profile might already exist - verify it's actually there
-          // Use a small delay to ensure database consistency
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
-          const { data: existingProfile, error: checkError } = await supabase
-            .from('users')
-            .select('id')
-            .eq('id', authData.user.id)
-            .single();
-          
-          if (existingProfile) {
-            // Profile exists, we're good!
-            console.log('Profile already exists (duplicate error was correct)');
-            profileCreated = true;
-            break;
-          } else {
-            // False positive or timing issue - wait and retry
-            console.log('Duplicate error but profile not found yet, retrying...', checkError);
-            attempts++;
-            await new Promise(resolve => setTimeout(resolve, 500));
-            continue;
-          }
-        } else if (profileError.code === '23503') {
-          // Foreign key constraint violation - auth user not ready yet
-          // Wait and retry
-          console.log(`Auth user not ready yet (attempt ${attempts + 1}/${maxAttempts}), retrying...`);
-          attempts++;
-          continue;
-        } else if (profileError.code === '42501') {
-          // RLS policy violation - session might not be available
-          console.log(`RLS policy violation (attempt ${attempts + 1}/${maxAttempts}) - ensuring session is set...`);
-          
-          // Try to restore/refresh the session
-          if (authData.session) {
-            await supabase.auth.setSession(authData.session);
-          } else {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-              // No session available - this is a problem
-              throw new Error('Cannot create profile: No authentication session available. Please ensure email confirmation is disabled or sign in first.');
-            }
-          }
-          
-          // Wait a bit and retry
-          await new Promise(resolve => setTimeout(resolve, 500));
-          attempts++;
-          continue;
-        } else {
-          // Other unexpected error - log and retry
-          console.error('Unexpected profile creation error:', profileError);
-          attempts++;
-          // For other errors, wait a bit before retrying
-          if (attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            continue;
-          } else {
-            // Final attempt failed - check if profile exists anyway
-            const { data: finalCheck } = await supabase
-              .from('users')
-              .select('id')
-              .eq('id', authData.user.id)
-              .single();
-            
-            if (finalCheck) {
-              // Profile exists after all!
-              profileCreated = true;
-              break;
-            }
-            
-            throw new Error(`Failed to create user profile: ${profileError.message} (code: ${profileError.code})`);
-          }
-        }
-      }
-
-      if (!profileCreated) {
-        throw new Error(
-          'Failed to create user profile after multiple attempts. The auth account was created, but the profile setup failed. Please try signing in - your account may work after a moment.'
-        );
-      }
-
-      // Wait a moment for the profile to be fully available
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // Only try to load profile if we have a session
-      // If email confirmation is required, session won't be available until email is confirmed
-      if (hasSession || authData.session) {
-        // Ensure session is available before loading profile
-        let sessionReady = false;
-        let sessionAttempts = 0;
-        while (!sessionReady && sessionAttempts < 5) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session && session.user?.id === authData.user.id) {
-            sessionReady = true;
-            setSession(session);
-          } else {
-            await new Promise(resolve => setTimeout(resolve, 200));
-            sessionAttempts++;
-          }
-        }
-
-        // Load the profile with retry logic (only if we have a session)
-        if (sessionReady) {
-          // The session is set, so onAuthStateChange listener will automatically
-          // call loadUserProfile. We just need to wait for it to complete.
-          // But set a timeout to ensure we don't wait forever
-          console.log('Session ready, auth state change should load profile...');
-          
-          // Wait for onAuthStateChange to load the profile (max 5 seconds)
-          let profileLoaded = false;
-          for (let i = 0; i < 20; i++) {
-            await new Promise(resolve => setTimeout(resolve, 250));
-            if (user && user.id === authData.user.id) {
-              profileLoaded = true;
-              break;
-            }
-          }
-          
-          if (!profileLoaded) {
-            // Fallback: manually load if listener didn't fire
-            console.log('Auth state change did not load profile, loading manually...');
-            await loadUserProfile(authData.user);
-          }
-        } else {
-          // Session not ready yet, but profile is created
-          // User will need to sign in or confirm email to load profile
-          console.log('Profile created but session not available. User may need to confirm email or sign in.');
-        }
-      } else {
-        // No session from signup (email confirmation required)
-        // Profile is created, but user needs to confirm email or sign in to access it
-        console.log('Profile created. Please check your email to confirm your account, then sign in.');
-      }
-    } catch (error) {
-      console.error('Error signing up:', error);
-      throw error;
-    }
-  };
-
-  const signIn = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error signing in:', error);
-      throw error;
-    }
+    const guestUser: GuestUser = {
+      id: `guest_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      name, phone, email, role: 'guest',
+    };
+    await AsyncStorage.setItem(GUEST_USER_KEY, JSON.stringify(guestUser));
+    setUser(guestUser);
   };
 
   const signOut = async () => {
     try {
-      // If signing out a guest, clear their waitlist history
       if (user?.role === 'guest') {
-        const guestHistoryKey = `@guest_waitlist_history:${user.id}`;
-        await AsyncStorage.removeItem(guestHistoryKey);
+        await AsyncStorage.removeItem(`@guest_waitlist_history:${user.id}`);
       }
-      
-      // Sign out from Clerk if signed in
-      if (isSignedIn && clerkSignOut) {
-        await clerkSignOut();
-      }
-      
-      // Also sign out from Supabase (for backward compatibility)
+      if (isSignedIn && clerkSignOut) await clerkSignOut();
       await supabase.auth.signOut();
       await AsyncStorage.removeItem(GUEST_USER_KEY);
       setUser(null);
@@ -540,207 +176,120 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const convertGuestToUser = async (email: string, password: string) => {
-    if (!user || user.role !== 'guest') {
-      throw new Error('No guest user to convert');
-    }
-
-    try {
-      const guestUser = user as GuestUser;
-
-      // Create authenticated account
-      await signUp(email, password, guestUser.name, 'tenant');
-
-      // Guest user will be cleared automatically in loadUserProfile
-    } catch (error) {
-      console.error('Error converting guest to user:', error);
-      throw error;
-    }
-  };
-
   const syncClerkUserToSupabase = async (clerkUserData: any) => {
-    try {
-      if (!clerkUserData?.id) return;
+    if (!clerkUserData?.id) return;
 
-      // Get stored role or default to 'tenant'
-      const storedRole = await AsyncStorage.getItem('@openhouse:oauth_role');
-      const userRole = storedRole as UserRole || 'tenant';
+    const email = clerkUserData.primaryEmailAddress?.emailAddress || clerkUserData.emailAddresses?.[0]?.emailAddress || '';
+    const storedRole = await AsyncStorage.getItem('@openhouse:oauth_role');
+    const desiredRole = (storedRole as UserRole) || 'tenant';
 
-      // Sync Clerk user to Supabase database
-      const { error } = await supabase
-        .from('users')
-        .upsert({
-          id: clerkUserData.id,
-          email: clerkUserData.primaryEmailAddress?.emailAddress || clerkUserData.emailAddresses?.[0]?.emailAddress || '',
-          name: clerkUserData.firstName && clerkUserData.lastName
-            ? `${clerkUserData.firstName} ${clerkUserData.lastName}`
-            : clerkUserData.firstName || clerkUserData.lastName || clerkUserData.username || 'User',
-          role: userRole,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'id',
-        });
+    // Check if user exists with this Clerk ID
+    const { data: existingUser } = await supabase.from('users').select('*').eq('id', clerkUserData.id).single();
 
-      if (error) {
-        console.error('Error syncing Clerk user to Supabase:', error);
-      } else {
-        // Remove stored role after successful sync
-        if (storedRole) {
-          await AsyncStorage.removeItem('@openhouse:oauth_role');
-        }
-        // Load the user profile from Supabase
-        await loadUserProfileFromSupabase(clerkUserData.id);
+    let userRole: UserRole;
+    if (existingUser) {
+      if (storedRole && existingUser.role !== desiredRole) {
+        await AsyncStorage.removeItem('@openhouse:oauth_role');
+        throw new Error(`EMAIL_EXISTS_DIFFERENT_ROLE:${existingUser.role}`);
       }
-    } catch (error) {
-      console.error('Error syncing Clerk user:', error);
+      userRole = existingUser.role as UserRole;
+    } else {
+      // Check if email exists with different account
+      const { data: emailCheck } = await supabase.from('users').select('*').eq('email', email).single();
+      if (emailCheck) {
+        await AsyncStorage.removeItem('@openhouse:oauth_role');
+        throw new Error(`EMAIL_EXISTS_DIFFERENT_ROLE:${emailCheck.role}`);
+      }
+      userRole = desiredRole;
     }
-  };
 
-  const loadUserProfileFromSupabase = async (userId: string) => {
+    // Update Clerk metadata
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error loading user profile:', error);
-        return;
+      if (typeof clerkUserData.update === 'function') {
+        await clerkUserData.update({ publicMetadata: { role: userRole } });
       }
+    } catch {}
 
+    // Set user optimistically
+    const userName = (clerkUserData.firstName && clerkUserData.lastName)
+      ? `${clerkUserData.firstName} ${clerkUserData.lastName}`
+      : clerkUserData.firstName || clerkUserData.lastName || clerkUserData.username || 'User';
+
+    setUser({
+      id: clerkUserData.id,
+      email,
+      name: userName,
+      role: userRole,
+      created_at: existingUser?.created_at || new Date().toISOString(),
+    });
+    setEffectiveRole(userRole);
+    await AsyncStorage.setItem('@openhouse:current_role', userRole);
+
+    // Sync to Supabase
+    const { error } = await supabase.from('users').upsert({
+      id: clerkUserData.id,
+      email,
+      name: userName,
+      role: userRole,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[Auth] Error syncing to Supabase:', error);
+    } else {
+      await AsyncStorage.removeItem('@openhouse:oauth_role');
+      // Load canonical profile
+      const { data } = await supabase.from('users').select('*').eq('id', clerkUserData.id).single();
       if (data) {
         setUser(data as User);
+        await AsyncStorage.setItem('@openhouse:current_role', data.role);
       }
-    } catch (error) {
-      console.error('Error loading user profile from Supabase:', error);
     }
   };
 
   const refreshUserProfile = async () => {
-    try {
-      // If using Clerk, sync Clerk user to Supabase
-      if (isSignedIn && clerkUser) {
-        await syncClerkUserToSupabase(clerkUser);
-      } else {
-        // Fallback to Supabase session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await loadUserProfile(session.user);
-        }
-      }
-    } catch (error) {
-      console.error('Error refreshing user profile:', error);
-      throw error;
+    if (isSignedIn && clerkUser) {
+      await syncClerkUserToSupabase(clerkUser);
+    } else {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) await loadUserProfile(session.user);
     }
   };
 
-  const signInWithGoogle = async (role: UserRole) => {
-    try {
-      // Store the role temporarily so we can assign it after OAuth completes
-      await AsyncStorage.setItem('@openhouse:oauth_role', role);
-      
-      const redirectUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/callback`;
-      
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
-      });
+  const deleteAccount = async () => {
+    if (!user) throw new Error('No user logged in');
 
-      if (error) {
-        await AsyncStorage.removeItem('@openhouse:oauth_role');
-        throw error;
-      }
+    const { error: supabaseError } = await supabase.from('users').delete().eq('id', user.id);
+    if (supabaseError) throw new Error('Failed to delete account from database');
 
-      if (data.url) {
-        // Open OAuth URL in browser - Supabase will handle the callback automatically
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          redirectUrl
-        );
-
-        // If user cancels, clean up
-        if (result.type === 'cancel') {
-          await AsyncStorage.removeItem('@openhouse:oauth_role');
-        }
-        // Success case is handled by onAuthStateChange listener below
-      }
-    } catch (error) {
-      console.error('Error signing in with Google:', error);
-      await AsyncStorage.removeItem('@openhouse:oauth_role');
-      throw error;
+    if (isSignedIn && clerkUser) {
+      try { await clerkUser.delete(); } catch {}
     }
+
+    await AsyncStorage.multiRemove([GUEST_USER_KEY, '@openhouse:oauth_role', '@openhouse:current_role']);
+    await signOut();
   };
 
-  const signInWithMicrosoft = async (role: UserRole) => {
-    try {
-      // Store the role temporarily
-      await AsyncStorage.setItem('@openhouse:oauth_role', role);
-      
-      const redirectUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/callback`;
-      
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'azure',
-        options: {
-          redirectTo: redirectUrl,
-          scopes: 'email',
-        },
-      });
-
-      if (error) {
-        await AsyncStorage.removeItem('@openhouse:oauth_role');
-        throw error;
-      }
-
-      if (data.url) {
-        // Open OAuth URL in browser
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          redirectUrl
-        );
-
-        // If user cancels, clean up
-        if (result.type === 'cancel') {
-          await AsyncStorage.removeItem('@openhouse:oauth_role');
-        }
-        // Success case is handled by onAuthStateChange listener below
-      }
-    } catch (error) {
-      console.error('Error signing in with Microsoft:', error);
-      await AsyncStorage.removeItem('@openhouse:oauth_role');
-      throw error;
-    }
-  };
-
-  const value: AuthContextType = {
-    user,
-    session,
-    isGuest: user?.role === 'guest',
-    isAuthenticated: (isSignedIn || session !== null) && user?.role !== 'guest',
-    loading,
-    signInAsGuest,
-    signUp,
-    signIn,
-    signOut,
-    signInWithGoogle,
-    signInWithMicrosoft,
-    convertGuestToUser,
-    refreshUserProfile,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{
+      user,
+      session,
+      isGuest: user?.role === 'guest',
+      isAuthenticated: isSignedIn || ((session !== null) && user?.role !== 'guest'),
+      loading,
+      effectiveRole,
+      signInAsGuest,
+      signOut,
+      deleteAccount,
+      refreshUserProfile,
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
