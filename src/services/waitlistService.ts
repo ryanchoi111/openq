@@ -107,13 +107,16 @@ export const waitlistService = {
   },
 
   /**
-   * Get all waitlist entries for an event
+   * Get all waitlist entries for an event (with user names for authenticated users)
    */
   async getWaitlist(eventId: string): Promise<WaitlistEntry[]> {
     try {
       const { data, error } = await supabase
         .from('waitlist_entries')
-        .select('*')
+        .select(`
+          *,
+          user:users(name, email)
+        `)
         .eq('event_id', eventId)
         .order('position', { ascending: true });
 

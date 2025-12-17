@@ -68,12 +68,12 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
       
       setProperties(data);
       
-      if (data.length === 0) {
-        Alert.alert(
-          'No Available Properties',
-          'All your properties already have active or scheduled open house events. Complete or cancel existing events first.'
-        );
-      }
+      // if (data.length === 0) {
+      //   Alert.alert(
+      //     'No Available Properties',
+      //     'All your properties already have active or scheduled open house events. Complete or cancel existing events first.'
+      //   );
+      // }
     } catch (error) {
       console.error('[CreateEventScreen] Error loading properties:', error);
       Alert.alert('Error', 'Failed to load properties. Please try again.');

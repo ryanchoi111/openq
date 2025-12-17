@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -67,7 +68,14 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
         [
           {
             text: 'Go to Profile',
-            onPress: () => navigation.navigate('Profile'),
+            onPress: () => navigation.dispatch(
+              CommonActions.reset({
+                index: 1,
+                routes: [
+                  { name: 'AgentTabs', state: { routes: [{ name: 'Profile' }] } },
+                ],
+              })
+            ),
           },
           {
             text: 'Cancel',
@@ -189,28 +197,28 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                     <Text style={styles.positionBadge}>#{entry.position}</Text>
                     <View style={styles.cardInfo}>
                       <Text style={styles.cardName}>
-                        {entry.guest_name || entry.user_id || 'Unknown'}
+                        {entry.guest_name || entry.user?.name || `Guest #${entry.position}`}
                       </Text>
+                      {(entry.guest_email || entry.user?.email) && (
+                        <Text style={styles.cardDetail}>{entry.guest_email || entry.user?.email}</Text>
+                      )}
                       {entry.guest_phone && (
                         <Text style={styles.cardDetail}>{entry.guest_phone}</Text>
                       )}
-                      {entry.guest_email && (
-                        <Text style={styles.cardDetail}>{entry.guest_email}</Text>
-                      )}
                     </View>
                   </View>
-                  {isSelected && (
-                    <View style={styles.checkmark}>
-                      <Ionicons name="checkmark-circle" size={32} color="#2563eb" />
-                    </View>
-                  )}
-                  {entry.expressed_interest && (
-                    <View style={styles.interestedBadge}>
-                      <Ionicons name="star" size={18} color="#fbbf24" />
-                      <Text style={styles.interestedText}>Interested</Text>
-                    </View>
-                  )}
                 </View>
+                {isSelected && (
+                  <View style={styles.checkmark}>
+                    <Ionicons name="checkmark-circle" size={20} color="#2563eb" />
+                  </View>
+                )}
+                {entry.expressed_interest && (
+                  <View style={styles.interestedBadge}>
+                    <Ionicons name="star" size={14} color="#fbbf24" />
+                    <Text style={styles.interestedText}>Interested</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })
@@ -333,20 +341,20 @@ const styles = StyleSheet.create({
   },
   checkmark: {
     position: 'absolute',
-    top: 8,
+    bottom: 42,
     right: 8,
   },
   interestedBadge: {
     position: 'absolute',
-    top: 47,
+    bottom: 12,
     right: 8,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fef3c7',
-    paddingHorizontal: 10,
-    paddingVertical: 0,
-    borderRadius: 12,
-    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 4,
   },
   interestedText: {
     fontSize: 11,

@@ -198,8 +198,8 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
           </>
         ) : scheduledEvents.length === 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>No Active Events</Text>
-            <Text style={styles.cardSubtext}>Create an open house to get started</Text>
+            <Text style={styles.cardTitle}>No Active Open Houses</Text>
+            <Text style={styles.cardSubtext}>Add a property and create an open house to get started</Text>
           </View>
         ) : null}
 

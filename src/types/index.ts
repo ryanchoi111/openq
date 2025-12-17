@@ -74,6 +74,10 @@ export interface WaitlistEntry {
   expressed_interest: boolean;
   application_sent: boolean;
   notes?: string;
+  user?: {
+    name: string;
+    email?: string;
+  };
 }
 
 // Application types
