@@ -15,7 +15,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { 
   RootStackParamList, 
   TenantStackParamList, 
-  AgentStackParamList 
+  AgentStackParamList,
+  AgentTabParamList,
 } from './types';
 
 // Auth Navigator
@@ -44,7 +45,7 @@ import EditEmailTemplateScreen from '../screens/agent/EditEmailTemplateScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const TenantStack = createNativeStackNavigator<TenantStackParamList>();
-const AgentTabs = createBottomTabNavigator();
+const AgentTabs = createBottomTabNavigator<AgentTabParamList>();
 const AgentStack = createNativeStackNavigator<AgentStackParamList>();
 
 // Tenant Navigator

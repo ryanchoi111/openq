@@ -68,14 +68,13 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
         [
           {
             text: 'Go to Profile',
-            onPress: () => navigation.dispatch(
-              CommonActions.reset({
-                index: 1,
-                routes: [
-                  { name: 'AgentTabs', state: { routes: [{ name: 'Profile' }] } },
-                ],
-              })
-            ),
+            onPress: () =>
+              navigation.dispatch(
+                CommonActions.navigate({
+                  name: 'AgentTabs',
+                  params: { screen: 'Profile' },
+                })
+              ),
           },
           {
             text: 'Cancel',

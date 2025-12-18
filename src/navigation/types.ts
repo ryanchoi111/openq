@@ -24,8 +24,16 @@ export type TenantStackParamList = {
   TenantHistory: undefined;
 };
 
+export type AgentTabParamList = {
+  AgentHome: undefined;
+  Properties: undefined;
+  CreateEvent: undefined;
+  EventHistory: undefined;
+  Profile: undefined;
+};
+
 export type AgentStackParamList = {
-  AgentTabs: undefined; // Container for tab navigator
+  AgentTabs: NavigatorScreenParams<AgentTabParamList> | undefined;
   AgentHome: undefined; // Home tab (accessible from stack for navigation.reset)
   Properties: undefined; // Properties tab
   CreateEvent: { propertyId?: string }; // Create event tab (accessible from stack)
