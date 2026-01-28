@@ -44,8 +44,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // Validate and determine sender email
-    // Priority: agent's email > fallback
-    const senderEmail = fromEmail || 'noreply@openq.app';
+    // Use Resend's onboarding domain for testing (replace with verified domain in production)
+    const senderEmail = 'onboarding@resend.dev';
     const senderName = agentName || 'OpenQ';
     
     // Log which email is being used for debugging

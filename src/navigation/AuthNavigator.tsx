@@ -17,9 +17,6 @@ import GuestJoinScreen from '../screens/auth/GuestJoinScreen';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
-type AuthNavigatorProps = {
-  initialRouteName?: keyof AuthStackParamList;
-};
 
 // Protected Auth Screen Wrapper
 // Redirects to home if user is already signed in

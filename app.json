@@ -38,6 +38,10 @@
     "plugins": [
       "expo-camera",
       "expo-font"
-    ]
+    ],
+    "updates": {
+      "enabled": false,
+      "fallbackToCacheTimeout": 0
+    }
   }
 }

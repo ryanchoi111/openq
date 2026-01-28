@@ -1,14 +1,113 @@
 /**
  * Application Service
- * Handles sending housing applications to tenants via email
- * 
- * Note: This service requires a backend email service (e.g., SendGrid, Resend, or Supabase Edge Functions)
- * to actually send emails. For now, it provides the structure and can be extended with actual email sending logic.
+ * Handles sending housing applications to tenants via email using Resend API
  */
 
 import { supabase } from '../config/supabase';
 import { waitlistService } from './waitlistService';
 import { emailTemplateService } from './emailTemplateService';
+
+const RESEND_API_KEY = process.env.EXPO_PUBLIC_RESEND_API_KEY;
+
+if (!RESEND_API_KEY) {
+  console.error('[applicationService] RESEND_API_KEY not configured');
+}
+
+interface Recipient {
+  email: string;
+  name: string;
+  entryId: string;
+  phone?: string;
+}
+
+async function sendEmailViaResend(
+  recipient: Recipient,
+  emailContent: string,
+  propertyAddress: string,
+  agentEmail?: string
+): Promise<void> {
+  if (!RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY not configured');
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: 'onboarding@resend.dev',
+      to: [recipient.email],
+      reply_to: agentEmail || 'onboarding@resend.dev',
+      subject: `Housing Application for ${propertyAddress}`,
+      html: emailContent,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Resend API error (${response.status}): ${errorText}`);
+  }
+}
+
+function buildEmailContent(
+  emailBody: string,
+  applicationUrl: string,
+  agentEmail?: string
+): string {
+  const parts = [
+    `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">`,
+    emailBody.replace(/\n/g, '<br>'),
+  ];
+
+  if (applicationUrl) {
+    parts.push(`<br><br><p><strong>Housing Application:</strong> <a href="${applicationUrl}" style="color: #2563eb; text-decoration: none;">Download PDF</a></p>`);
+  }
+
+  if (agentEmail) {
+    parts.push(`<br><br><p style="font-size: 12px; color: #666;">Reply to: <a href="mailto:${agentEmail}" style="color: #2563eb;">${agentEmail}</a></p>`);
+  }
+
+  parts.push('</div>');
+  return parts.join('');
+}
+
+async function gatherRecipients(entries: any[]): Promise<Recipient[]> {
+  const recipients: Recipient[] = [];
+
+  for (const entry of entries) {
+    if (entry.user_id) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('email, name')
+        .eq('id', entry.user_id)
+        .single();
+
+      if (user?.email) {
+        recipients.push({
+          email: user.email,
+          name: user.name || 'User',
+          phone: entry.guest_phone,
+          entryId: entry.id,
+        });
+      }
+    } else if (entry.guest_email) {
+      recipients.push({
+        email: entry.guest_email,
+        name: entry.guest_name || 'Guest',
+        phone: entry.guest_phone,
+        entryId: entry.id,
+      });
+    }
+  }
+
+  if (recipients.length === 0) {
+    throw new Error('No valid email addresses found');
+  }
+
+  return recipients;
+}
 
 export const applicationService = {
   /**
@@ -49,52 +148,8 @@ export const applicationService = {
       if (eventError) throw eventError;
       if (!event) throw new Error('Event not found');
 
-      // Prepare recipient data
-      const recipients: Array<{
-        email?: string;
-        phone?: string;
-        name: string;
-        entryId: string;
-      }> = [];
-
-      for (const entry of selectedEntries) {
-        let email: string | undefined;
-        let name: string;
-
-        if (entry.user_id) {
-          // For authenticated users, fetch their email from the users table
-          const { data: user, error: userError } = await supabase
-            .from('users')
-            .select('email, name')
-            .eq('id', entry.user_id)
-            .single();
-          
-          if (userError) {
-            console.error(`Error fetching user ${entry.user_id}:`, userError);
-            continue;
-          }
-          
-          email = user?.email;
-          name = user?.name || 'User';
-        } else {
-          // For guest users, use guest_email
-          email = entry.guest_email;
-          name = entry.guest_name || 'Guest';
-        }
-
-        if (email) {
-          recipients.push({
-            email,
-            phone: entry.guest_phone,
-            name,
-            entryId: entry.id,
-          });
-        }
-      }
-
-      if (recipients.length === 0) {
-        throw new Error('No valid email addresses found for selected recipients');
-      }
+      // Gather recipients with valid emails
+      const recipients = await gatherRecipients(selectedEntries);
 
       // Load custom email template for this agent
       const emailTemplate = await emailTemplateService.getEmailTemplate(agentId);
@@ -127,46 +182,23 @@ export const applicationService = {
       
       if (updateError) throw updateError;
 
-      // Send actual emails via Edge Function
-      try {
-        // Prepare personalized emails for each recipient
-        const emailsToSend = recipients.map(recipient => {
-          // Replace placeholders with actual data for this recipient
-          const personalizedEmailBody = emailTemplateService.replaceTemplatePlaceholders(emailTemplate, {
+      // Send emails to all recipients
+      const emailResults = await Promise.allSettled(
+        recipients.map(async (recipient) => {
+          const personalizedBody = emailTemplateService.replaceTemplatePlaceholders(emailTemplate, {
             tenantName: recipient.name,
             propertyAddress,
             agentName,
           });
-          
-          return {
-            email: recipient.email!,
-            name: recipient.name,
-            emailBody: personalizedEmailBody,
-          };
-        });
 
-        const { data, error: functionError } = await supabase.functions.invoke('send-application-email', {
-          body: {
-            recipients: emailsToSend,
-            propertyAddress,
-            applicationUrl,
-            agentName,
-            fromEmail: agentEmail,
-          },
-        });
+          const emailContent = buildEmailContent(personalizedBody, applicationUrl, agentEmail);
+          await sendEmailViaResend(recipient, emailContent, propertyAddress, agentEmail);
+        })
+      );
 
-        if (functionError) {
-          console.error('Error calling email function:', functionError);
-          // Don't throw - applications are recorded even if email fails
-          throw new Error(`Emails failed to send: ${functionError.message}`);
-        }
-
-        console.log('Email sending result:', data);
-        console.log(`Housing application sent to ${recipients.length} recipient(s)`);
-      } catch (emailError) {
-        console.error('Error sending emails:', emailError);
-        // Applications are recorded, but email sending failed
-        throw emailError;
+      const failed = emailResults.filter((r) => r.status === 'rejected');
+      if (failed.length > 0) {
+        throw new Error(`Failed to send ${failed.length} of ${recipients.length} email(s)`);
       }
     } catch (error) {
       console.error('Error sending application:', error);
