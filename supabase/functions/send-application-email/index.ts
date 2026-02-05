@@ -1,8 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-
-// To use this function, you need to set the RESEND_API_KEY secret in Supabase Dashboard
-// Run: supabase secrets set RESEND_API_KEY=your_resend_api_key_here
-// Get your API key from: https://resend.com/api-keys
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
@@ -10,14 +6,17 @@ interface EmailRecipient {
   email: string;
   name: string;
   emailBody: string;
+  entryId: string;
 }
 
 interface EmailRequest {
+  eventId: string;
+  propertyId: string;
   recipients: EmailRecipient[];
   propertyAddress: string;
   applicationUrl: string;
   agentName: string;
-  fromEmail?: string;
+  agentEmail?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -37,38 +36,73 @@ Deno.serve(async (req: Request) => {
       throw new Error('RESEND_API_KEY is not set. Please configure it in Supabase Dashboard.');
     }
 
-    const { recipients, propertyAddress, applicationUrl, agentName, fromEmail }: EmailRequest = await req.json();
+    // Get Supabase client with auth from request
+    const authHeader = req.headers.get('Authorization')!;
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const {
+      eventId,
+      propertyId,
+      recipients,
+      propertyAddress,
+      applicationUrl,
+      agentName,
+      agentEmail
+    }: EmailRequest = await req.json();
 
     if (!recipients || recipients.length === 0) {
       throw new Error('No recipients provided');
     }
 
-    // Validate and determine sender email
-    // Use Resend's onboarding domain for testing (replace with verified domain in production)
-    const senderEmail = 'onboarding@resend.dev';
-    const senderName = agentName || 'OpenQ';
-    
-    // Log which email is being used for debugging
-    console.log(`Sending emails from: ${senderEmail} (${senderName})`);
-    if (!fromEmail) {
-      console.warn('Warning: No agent email provided, using fallback address');
+    if (!eventId || !propertyId) {
+      throw new Error('Event ID and Property ID are required');
     }
 
-    // Send emails to all recipients via Resend
-    // Resend allows sending from verified domains - agents can verify their email domains
-    // See: https://resend.com/docs/dashboard/domains/introduction
+    const applicationRecords = recipients.map(recipient => ({
+      event_id: eventId,
+      waitlist_entry_id: recipient.entryId,
+      property_id: propertyId,
+      recipient_email: recipient.email,
+      application_url: applicationUrl,
+      status: 'sent' as const,
+    }));
+
+    const { error: insertError } = await supabaseClient
+      .from('applications')
+      .insert(applicationRecords);
+
+    if (insertError) {
+      console.error('Error inserting application records:', insertError);
+      throw new Error(`Database error: ${insertError.message}`);
+    }
+
+    const { error: updateError } = await supabaseClient
+      .from('waitlist_entries')
+      .update({ application_sent: true })
+      .in('id', recipients.map(r => r.entryId));
+
+    if (updateError) {
+      console.error('Error updating waitlist entries:', updateError);
+      throw new Error(`Database error: ${updateError.message}`);
+    }
+
+    const senderEmail = 'noreply@openqapp.xyz';
+    const senderName = agentName || 'OpenQ';
+
     const results = await Promise.allSettled(
       recipients.map(async (recipient) => {
-        // Build email content with attachment link
-        // Convert plain text with HTML tags to proper HTML format
         const emailContent = `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
             ${recipient.emailBody.replace(/\n/g, '<br>')}
             ${applicationUrl ? `<br><br><p><strong>Housing Application:</strong> <a href="${applicationUrl}" style="color: #2563eb; text-decoration: none;">Download PDF</a></p>` : ''}
-            ${fromEmail ? `<br><br><p style="font-size: 12px; color: #666;">Reply to: <a href="mailto:${fromEmail}" style="color: #2563eb;">${fromEmail}</a></p>` : ''}
+            ${agentEmail ? `<br><br><p style="font-size: 12px; color: #666;">Reply to: <a href="mailto:${agentEmail}" style="color: #2563eb;">${agentEmail}</a></p>` : ''}
           </div>
         `;
-        
+
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -78,7 +112,7 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify({
             from: `${senderName} <${senderEmail}>`,
             to: [recipient.email],
-            reply_to: fromEmail || senderEmail,
+            reply_to: agentEmail || senderEmail,
             subject: `Housing Application for ${propertyAddress}`,
             html: emailContent,
           }),
@@ -86,17 +120,17 @@ Deno.serve(async (req: Request) => {
 
         if (!response.ok) {
           const errorText = await response.text();
+          console.error(`[Edge Function] Resend API error for ${recipient.email}:`, {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText,
+          });
+
           let errorMessage = `Failed to send email to ${recipient.email}`;
           try {
             const errorJson = JSON.parse(errorText);
-            const errorDetails = errorJson.message || errorMessage;
-            
-            // Check for domain verification errors
-            if (errorDetails.includes('domain') || errorDetails.includes('verification') || errorDetails.includes('not verified')) {
-              errorMessage = `Domain verification required: The email domain for ${senderEmail} must be verified in Resend. ${errorDetails}`;
-            } else {
-              errorMessage = errorDetails;
-            }
+            errorMessage = errorJson.message || errorJson.error || errorMessage;
+            console.error(`[Edge Function] Parsed error:`, errorJson);
           } catch {
             errorMessage = `${errorMessage}: ${errorText}`;
           }
@@ -112,18 +146,8 @@ Deno.serve(async (req: Request) => {
       })
     );
 
-    // Check results
     const successful = results.filter((r) => r.status === 'fulfilled');
     const failed = results.filter((r) => r.status === 'rejected');
-
-    // Log detailed results for debugging
-    console.log(`Email sending completed: ${successful.length} successful, ${failed.length} failed`);
-    if (failed.length > 0) {
-      failed.forEach((result, index) => {
-        const recipientIndex = results.indexOf(result);
-        console.error(`Failed to send to ${recipients[recipientIndex]?.email}:`, result.status === 'rejected' ? result.reason : 'Unknown error');
-      });
-    }
 
     return new Response(
       JSON.stringify({

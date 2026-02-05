@@ -39,6 +39,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [name, setName] = useState('');
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
+  const [phone] = useState('+16176783249'); // Hardcoded for testing
   const [role, setRole] = useState<UserRole>('tenant');
   const [pendingVerification, setPendingVerification] = useState(false);
   const [code, setCode] = useState('');
@@ -121,6 +122,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               id: clerkUserId,
               email: emailAddress.trim(),
               name: name.trim(),
+              phone: phone,
               role: role,
               updated_at: new Date().toISOString(),
             }, {
@@ -175,6 +177,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                       id: clerkUserId,
                       email: emailAddress.trim(),
                       name: name.trim(),
+                      phone: phone,
                       role: role,
                       updated_at: new Date().toISOString(),
                     }, {
@@ -240,6 +243,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                     id: clerkUserId,
                     email: emailAddress.trim(),
                     name: name.trim(),
+                    phone: phone,
                     role: role,
                     updated_at: new Date().toISOString(),
                   }, {
@@ -350,6 +354,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               id: clerkUser,
               email: emailAddress.trim(),
               name: name.trim(),
+              phone: phone,
               role: role,
               updated_at: new Date().toISOString(),
             }, {

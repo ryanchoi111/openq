@@ -38,8 +38,6 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
       const data = await waitlistService.getWaitlist(eventId);
       setEntries(data || []);
     } catch (error) {
-      console.error('Error loading waitlist entries:', error);
-      // Only show alert for actual errors, not empty waitlists
       if (error instanceof Error && !error.message.includes('No rows')) {
         Alert.alert('Error', 'Failed to load waitlist entries');
       }
@@ -60,7 +58,6 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleSendApplication = async () => {
-    // Check if user is an agent with housing application
     if (!user || user.role === 'guest' || !('housing_application_url' in user) || !user.housing_application_url) {
       Alert.alert(
         'No Application Uploaded',
@@ -90,13 +87,8 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
 
-    // Filter entries to get only selected ones with valid emails
     const selectedEntries = entries.filter(entry => selectedIds.has(entry.id));
-    const entriesWithEmails = selectedEntries.filter(entry => {
-      // For authenticated users, we need their email from the user profile
-      // For guests, guest_email is always present (required field)
-      return entry.user_id || entry.guest_email;
-    });
+    const entriesWithEmails = selectedEntries.filter(entry => entry.user_id || entry.guest_email);
 
     if (entriesWithEmails.length === 0) {
       Alert.alert(
@@ -108,7 +100,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
 
     Alert.alert(
       'Send Housing Application',
-      `Send application to ${entriesWithEmails.length} recipient(s)?`,
+      `Send application via email to ${entriesWithEmails.length} recipient(s)?`,
       [
         {
           text: 'Cancel',
@@ -119,11 +111,10 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
           onPress: async () => {
             try {
               setSending(true);
-              // We already validated user has housing_application_url above
-              const applicationUrl = user.role !== 'guest' && 'housing_application_url' in user 
-                ? user.housing_application_url 
+              const applicationUrl = user.role !== 'guest' && 'housing_application_url' in user
+                ? user.housing_application_url
                 : '';
-              
+
               if (!applicationUrl) {
                 throw new Error('No housing application found');
               }
@@ -136,9 +127,10 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                 user.name,
                 user.email
               );
+
               Alert.alert(
                 'Success',
-                `Housing application sent to ${entriesWithEmails.length} recipient(s)!`,
+                `Housing application sent via email to ${entriesWithEmails.length} recipient(s)!`,
                 [
                   {
                     text: 'OK',
@@ -147,7 +139,6 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                 ]
               );
             } catch (error: any) {
-              console.error('Error sending application:', error);
               Alert.alert('Error', error.message || 'Failed to send application');
             } finally {
               setSending(false);
@@ -171,7 +162,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
       <ScrollView style={styles.content}>
         <Text style={styles.title}>Select Recipients</Text>
         <Text style={styles.subtitle}>
-          Choose tenants to send the housing application to
+          Choose tenants to send the housing application via email
         </Text>
 
         {entries.length === 0 ? (
@@ -237,7 +228,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
             {sending ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.sendButtonText}>Send Housing Application</Text>
+              <Text style={styles.sendButtonText}>Send Application via Email</Text>
             )}
           </TouchableOpacity>
         </View>
