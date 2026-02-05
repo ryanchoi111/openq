@@ -192,9 +192,6 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                       {(entry.guest_email || entry.user?.email) && (
                         <Text style={styles.cardDetail}>{entry.guest_email || entry.user?.email}</Text>
                       )}
-                      {entry.guest_phone && (
-                        <Text style={styles.cardDetail}>{entry.guest_phone}</Text>
-                      )}
                     </View>
                   </View>
                 </View>

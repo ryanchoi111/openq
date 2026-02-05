@@ -61,8 +61,8 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      console.log('[Auth] Email/password sign-in started:', { email: emailAddress });
-      
+      console.log('[Auth] Email/password sign-in started');
+
       // Start the sign-in process using the email and password provided
       const signInAttempt = await signIn.create({
         identifier: emailAddress.trim(),

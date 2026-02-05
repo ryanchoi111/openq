@@ -1,6 +1,6 @@
 /**
  * Guest Join Screen
- * Quick join with name/phone - prompts account creation for interest tracking
+ * Quick join with name/email for waitlist entry
  */
 
 import React, { useState } from 'react';
@@ -24,18 +24,12 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'GuestJoin'>;
 const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
   const { signInAsGuest } = useAuth();
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleJoin = async () => {
     if (!name.trim()) {
       Alert.alert('Required', 'Please enter your name');
-      return;
-    }
-
-    if (!phone.trim()) {
-      Alert.alert('Required', 'Please enter your phone number');
       return;
     }
 
@@ -46,7 +40,7 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
 
     try {
       setLoading(true);
-      await signInAsGuest(name.trim(), phone.trim(), email.trim());
+      await signInAsGuest(name.trim(), email.trim());
       // Navigation handled by AppNavigator based on auth state
     } catch (error) {
       Alert.alert('Error', 'Failed to join. Please try again.');
@@ -80,20 +74,6 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
               placeholder="Your full name"
               autoCapitalize="words"
               autoComplete="name"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Phone Number <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="(555) 123-4567"
-              keyboardType="phone-pad"
-              autoComplete="tel"
             />
           </View>
 

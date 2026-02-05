@@ -65,7 +65,6 @@ export const waitlistService = {
         ? {
             event_id: eventId,
             guest_name: user.name,
-            guest_phone: user.phone,
             guest_email: user.email,
             position: nextPosition,
             status: 'waiting' as const,

@@ -88,9 +88,6 @@ const CompletedEventWaitlistScreen: React.FC<Props> = ({ route }) => {
           <Text style={styles.entryName}>
             {item.guest_name || item.user?.name || `Guest #${item.position}`}
           </Text>
-          {item.guest_phone && (
-            <Text style={styles.entryPhone}>{item.guest_phone}</Text>
-          )}
           {(item.guest_email || item.user?.email) && (
             <Text style={styles.entryPhone}>{item.guest_email || item.user?.email}</Text>
           )}

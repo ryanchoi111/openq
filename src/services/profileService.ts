@@ -17,6 +17,14 @@ const IMAGE_CONTENT_TYPES: Record<string, string> = {
   webp: 'image/webp',
 };
 
+const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) {
+    throw new Error('No active session for storage upload');
+}
+
+
+
 async function uploadToStorage(
   bucket: string,
   filePath: string,
@@ -34,7 +42,7 @@ async function uploadToStorage(
   const response = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${accessToken}`,
       'apikey': SUPABASE_ANON_KEY,
     },
     body: formData,

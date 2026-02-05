@@ -95,9 +95,6 @@ const CompletedToursScreen: React.FC<Props> = ({ route }) => {
                     <Ionicons name="star" size={20} color="#fbbf24" style={styles.starIcon} />
                   )}
                 </View>
-                {item.guest_phone && (
-                  <Text style={styles.detail}>{item.guest_phone}</Text>
-                )}
                 {(item.guest_email || item.user?.email) && (
                   <Text style={styles.detail}>{item.guest_email || item.user?.email}</Text>
                 )}

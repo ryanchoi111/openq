@@ -229,13 +229,6 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           )}
 
-          {user.phone && (
-            <View style={styles.infoCard}>
-              <Text style={styles.label}>Phone</Text>
-              <Text style={styles.value}>{user.phone}</Text>
-            </View>
-          )}
-
           <View style={styles.infoCard}>
             <Text style={styles.label}>Role</Text>
             <Text style={styles.value}>

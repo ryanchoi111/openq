@@ -27,7 +27,7 @@ interface AuthContextType {
    * - Clerk `publicMetadata.role`
    */
   effectiveRole: UserRole | null;
-  signInAsGuest: (name: string, phone: string, email: string) => Promise<void>;
+  signInAsGuest: (name: string, email: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
@@ -146,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInAsGuest = async (name: string, phone: string, email: string) => {
+  const signInAsGuest = async (name: string, email: string) => {
     // Clear previous guest history
     const allKeys = await AsyncStorage.getAllKeys();
     const guestHistoryKeys = allKeys.filter(key => key.startsWith('@guest_waitlist_history:'));
@@ -154,7 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const guestUser: GuestUser = {
       id: `guest_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-      name, phone, email, role: 'guest',
+      name, email, role: 'guest',
     };
     await AsyncStorage.setItem(GUEST_USER_KEY, JSON.stringify(guestUser));
     setUser(guestUser);

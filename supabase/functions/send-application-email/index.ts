@@ -62,34 +62,6 @@ Deno.serve(async (req: Request) => {
       throw new Error('Event ID and Property ID are required');
     }
 
-    const applicationRecords = recipients.map(recipient => ({
-      event_id: eventId,
-      waitlist_entry_id: recipient.entryId,
-      property_id: propertyId,
-      recipient_email: recipient.email,
-      application_url: applicationUrl,
-      status: 'sent' as const,
-    }));
-
-    const { error: insertError } = await supabaseClient
-      .from('applications')
-      .insert(applicationRecords);
-
-    if (insertError) {
-      console.error('Error inserting application records:', insertError);
-      throw new Error(`Database error: ${insertError.message}`);
-    }
-
-    const { error: updateError } = await supabaseClient
-      .from('waitlist_entries')
-      .update({ application_sent: true })
-      .in('id', recipients.map(r => r.entryId));
-
-    if (updateError) {
-      console.error('Error updating waitlist entries:', updateError);
-      throw new Error(`Database error: ${updateError.message}`);
-    }
-
     const senderEmail = 'noreply@openqapp.xyz';
     const senderName = agentName || 'OpenQ';
 
@@ -120,13 +92,13 @@ Deno.serve(async (req: Request) => {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(`[Edge Function] Resend API error for ${recipient.email}:`, {
+          console.error('[Edge Function] Resend API error:', {
             status: response.status,
             statusText: response.statusText,
             body: errorText,
           });
 
-          let errorMessage = `Failed to send email to ${recipient.email}`;
+          let errorMessage = 'Failed to send email';
           try {
             const errorJson = JSON.parse(errorText);
             errorMessage = errorJson.message || errorJson.error || errorMessage;
@@ -148,6 +120,41 @@ Deno.serve(async (req: Request) => {
 
     const successful = results.filter((r) => r.status === 'fulfilled');
     const failed = results.filter((r) => r.status === 'rejected');
+
+    // Build application records based on actual send results
+    const applicationRecords = results.map((result, index) => ({
+      event_id: eventId,
+      waitlist_entry_id: recipients[index].entryId,
+      property_id: propertyId,
+      recipient_email: recipients[index].email,
+      application_url: applicationUrl,
+      status: result.status === 'fulfilled' ? ('sent' as const) : ('failed' as const),
+    }));
+
+    // Insert application records with actual statuses
+    const { error: insertError } = await supabaseClient
+      .from('applications')
+      .insert(applicationRecords);
+
+    if (insertError) {
+      console.error('Error inserting application records:', insertError);
+    }
+
+    // Only update waitlist entries for successful sends
+    const successfulEntryIds = results
+      .map((result, index) => result.status === 'fulfilled' ? recipients[index].entryId : null)
+      .filter((id): id is string => id !== null);
+
+    if (successfulEntryIds.length > 0) {
+      const { error: updateError } = await supabaseClient
+        .from('waitlist_entries')
+        .update({ application_sent: true })
+        .in('id', successfulEntryIds);
+
+      if (updateError) {
+        console.error('Error updating waitlist entries:', updateError);
+      }
+    }
 
     return new Response(
       JSON.stringify({
