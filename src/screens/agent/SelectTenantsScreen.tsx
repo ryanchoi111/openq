@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -17,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { waitlistService } from '../../services/waitlistService';
 import { applicationService } from '../../services/applicationService';
 import { WaitlistEntry } from '../../types';
+import { Alert } from '../../utils/alert';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'SelectTenants'>;
 

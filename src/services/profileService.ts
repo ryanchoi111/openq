@@ -3,6 +3,7 @@
  * Handles user profile operations including file uploads
  */
 
+import { Platform } from 'react-native';
 import { supabase, supabaseUrl, supabaseAnonKey } from '../config/supabase';
 import { User } from '../types';
 
@@ -28,11 +29,20 @@ async function uploadToStorage(
   }
 
   const formData = new FormData();
-  formData.append('file', {
-    uri: fileUri,
-    type: contentType,
-    name: filePath.split('/').pop(),
-  } as any);
+
+  if (Platform.OS === 'web') {
+    // On web, fetch the file and create a Blob
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    formData.append('file', blob, filePath.split('/').pop());
+  } else {
+    // On native, use the uri-based approach
+    formData.append('file', {
+      uri: fileUri,
+      type: contentType,
+      name: filePath.split('/').pop(),
+    } as any);
+  }
 
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`;
   const response = await fetch(uploadUrl, {

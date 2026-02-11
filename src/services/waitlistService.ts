@@ -121,6 +121,8 @@ export const waitlistService = {
 
       if (error) throw error;
 
+      console.log('[getWaitlist] Raw data:', JSON.stringify(data, null, 2));
+
       return data as WaitlistEntry[];
     } catch (error) {
       console.error('Error fetching waitlist:', error);
