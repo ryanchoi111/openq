@@ -9,7 +9,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -247,11 +246,9 @@ const AgentNavigator = () => {
 
 // Main Navigator - routes based on user role
 const MainNavigator = () => {
-  const { effectiveRole } = useAuth();
+  const { user } = useAuth();
 
-  // Avoid briefly rendering the wrong navigator while we are still resolving role
-  // (e.g. right after Clerk OAuth completes, before Supabase profile is loaded).
-  if (!effectiveRole) {
+  if (!user || user.role === 'guest') {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" />
@@ -259,13 +256,12 @@ const MainNavigator = () => {
     );
   }
 
-  return effectiveRole === 'agent' ? <AgentNavigator /> : <TenantNavigator />;
+  return user.role === 'agent' ? <AgentNavigator /> : <TenantNavigator />;
 };
 
 // Root Navigator
 export const AppNavigator = () => {
-  const { user, loading, effectiveRole } = useAuth();
-  const { isSignedIn } = useClerkAuth();
+  const { user, isGuest, loading } = useAuth();
 
   if (loading) {
     return (
@@ -275,19 +271,23 @@ export const AppNavigator = () => {
     );
   }
 
-  // If Clerk is signed in but we haven't resolved a role yet, gate rendering.
-  // This prevents a flash of the wrong navigator and keeps transitions smooth.
-  if (isSignedIn && !effectiveRole) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
+  // Check if user is authenticated (not guest)
+  const isAuthenticated = user && !isGuest;
 
-  // If user is signed in (via Clerk or our auth context), show Main navigator
-  // Otherwise, show Auth navigator
-  const isAuthenticated = isSignedIn || user;
+  console.log('');
+  console.log('┌────────────────────────────────────┐');
+  console.log('│  [AppNavigator] RENDER             │');
+  console.log('└────────────────────────────────────┘');
+  console.log('[AppNavigator] Auth state:', {
+    hasUser: !!user,
+    userId: user?.id,
+    userRole: (user as any)?.role,
+    isGuest,
+    isAuthenticated,
+    loading,
+  });
+  console.log('[AppNavigator] Will show:', isAuthenticated ? 'HOME SCREEN' : 'AUTH SCREEN');
+  console.log('');
 
   return (
     <NavigationContainer>

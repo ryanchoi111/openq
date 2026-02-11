@@ -1,8 +1,8 @@
 /**
- * Sign In Screen - Clerk Implementation
+ * Sign In Screen - Supabase Auth Implementation
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -17,41 +17,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { useSignIn, SignedIn, SignedOut, useOAuth, useUser, useAuth as useClerkAuth } from '@clerk/clerk-expo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignIn'>;
 
 const SignInScreen: React.FC<Props> = ({ navigation }) => {
-  const { signIn, setActive, isLoaded } = useSignIn();
-  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
-  const { startOAuthFlow: startMicrosoftOAuth } = useOAuth({ strategy: 'oauth_microsoft' });
-  const { user: clerkUser } = useUser();
-  const clerkAuth = useClerkAuth();
-  const { isSignedIn: clerkIsSignedIn } = clerkAuth;
-  const { refreshUserProfile, user: authUser, isAuthenticated, signOut } = useAuth();
+  const { signInWithEmail, signInWithGoogle } = useAuth();
+
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [oauthCompleted, setOauthCompleted] = useState(false);
 
-  // Watch for authentication state changes after OAuth
-  useEffect(() => {
-    if (oauthCompleted && (authUser || isAuthenticated)) {
-      // User is authenticated, navigation will be handled by AppNavigator
-      // Reset the flag
-      setOauthCompleted(false);
-      setLoading(false);
-    }
-  }, [oauthCompleted, authUser, isAuthenticated]);
-
-  // Handle the submission of the sign-in form
   const handleSignIn = async () => {
-    if (!isLoaded) return;
-
     if (!emailAddress.trim() || !password.trim()) {
       setError('Please enter email and password');
       return;
@@ -61,41 +40,11 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      console.log('[Auth] Email/password sign-in started');
-
-      // Start the sign-in process using the email and password provided
-      const signInAttempt = await signIn.create({
-        identifier: emailAddress.trim(),
-        password,
-      });
-
-      // If sign-in process is complete, set the created session as active
-      // and redirect the user
-      if (signInAttempt.status === 'complete') {
-        await setActive({ session: signInAttempt.createdSessionId });
-        
-        console.log('[Auth] Sign-in complete, refreshing profile');
-        // Refresh user profile to sync with Supabase - this will trigger navigation to home
-        await refreshUserProfile();
-      } else {
-        // If the status isn't complete, check why. User might need to
-        // complete further steps.
-        console.error('Sign in attempt incomplete:', {
-          status: signInAttempt.status,
-          createdSessionId: signInAttempt.createdSessionId
-        });
-        Alert.alert('Verification Required', 'Please complete the verification process');
-      }
+      await signInWithEmail(emailAddress.trim(), password);
+      // Navigation handled automatically by AppNavigator
     } catch (err: any) {
-      // See https://clerk.com/docs/custom-flows/error-handling
-      // for more info on error handling
-      console.error('[Auth] Email/password sign-in error:', {
-        message: err.message,
-        errors: err.errors,
-        code: err.code,
-        status: err.status
-      });
-      const errorMessage = err.errors?.[0]?.message || err.message || 'Sign-in failed. Please check your credentials.';
+      console.error('[SignIn] Error:', err);
+      const errorMessage = err.message || 'Sign-in failed. Please check your credentials.';
       setError(errorMessage);
       Alert.alert('Sign In Failed', errorMessage);
     } finally {
@@ -103,68 +52,15 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  // Handle OAuth sign-in
-  const handleOAuthSignIn = async (strategy: 'oauth_google' | 'oauth_microsoft') => {
-    if (!isLoaded) {
-      Alert.alert('Loading', 'Please wait...');
-      return;
-    }
-
+  const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
-      
-      console.log('[Auth] OAuth sign-in started:', { strategy });
-      
-      const startOAuth = strategy === 'oauth_google' ? startGoogleOAuth : startMicrosoftOAuth;
-      
-      const result = await startOAuth();
-      console.log('[Auth] OAuth result:', result);
-      
-      // Clerk handles the entire OAuth flow
-      // We just need to check if a session was created
-      const hasSessionId = result.createdSessionId && result.createdSessionId.trim() !== '';
-      
-      if (!hasSessionId) {
-        console.log('[Auth] OAuth did not create a session - user may need to sign up');
-        Alert.alert(
-          'Sign Up Required',
-          'This account doesn\'t exist. Please use the Sign Up screen to create an account first.'
-        );
-        return;
-      }
-
-      // Session created successfully - activate it
-      console.log('[Auth] Setting active session');
-      if (result.setActive) {
-        await result.setActive({ session: result.createdSessionId });
-      }
-
-      // Sync profile - handle role mismatch inline
-      try {
-        await refreshUserProfile();
-        setOauthCompleted(true);
-      } catch (profileError: any) {
-        if (profileError.message?.includes('EMAIL_EXISTS_DIFFERENT_ROLE')) {
-          const existingRole = profileError.message.split(':')[1];
-          const roleDisplay = existingRole.charAt(0).toUpperCase() + existingRole.slice(1);
-          await signOut();
-          Alert.alert(
-            'Account Already Exists',
-            `This email is already registered as a ${roleDisplay}. Please sign in with your existing account or use a different email.`,
-            [{ text: 'OK' }]
-          );
-          navigation.reset({ index: 0, routes: [{ name: 'SignUp' }] });
-          return;
-        }
-        console.error('[Auth] refreshUserProfile failed:', profileError);
-      }
+      await signInWithGoogle();
+      // Navigation handled automatically by AppNavigator
     } catch (error: any) {
-      console.error('[Auth] OAuth sign in error:', error);
-      
-      Alert.alert(
-        'Sign In Failed',
-        error.errors?.[0]?.message || error.message || `Failed to sign in with ${strategy === 'oauth_google' ? 'Google' : 'Microsoft'}`
-      );
+      console.error('[SignIn] Google OAuth error:', error);
+      const errorMessage = error.message || 'Failed to sign in with Google';
+      Alert.alert('Sign In Failed', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -172,113 +68,93 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <SignedOut>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.content}
-        >
-          <View style={styles.header}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to your account</Text>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.content}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Sign in to your account</Text>
+        </View>
+
+        <View style={styles.form}>
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={emailAddress}
+              onChangeText={setEmailAddress}
+              placeholder="Enter email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              editable={!loading}
+            />
           </View>
 
-          <View style={styles.form}>
-            {error ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={emailAddress}
-                onChangeText={setEmailAddress}
-                placeholder="Enter email"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                editable={!loading}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Enter password"
-                secureTextEntry
-                autoComplete="password"
-                editable={!loading}
-              />
-            </View>
-
-            <View style={styles.oauthContainer}>
-              <Text style={styles.oauthLabel}>Or sign in with:</Text>
-              <View style={styles.oauthButtons}>
-                <TouchableOpacity
-                  style={[styles.oauthButton, styles.googleButton]}
-                  onPress={() => handleOAuthSignIn('oauth_google')}
-                  disabled={loading}
-                >
-                  <Ionicons name="logo-google" size={20} color="#fff" />
-                  <Text style={styles.oauthButtonText}>Google</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.oauthButton, styles.microsoftButton]}
-                  onPress={() => handleOAuthSignIn('oauth_microsoft')}
-                  disabled={loading}
-                >
-                  <Ionicons name="logo-microsoft" size={20} color="#fff" />
-                  <Text style={styles.oauthButtonText}>Microsoft</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleSignIn}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Continue</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.linkButton}
-              onPress={() => navigation.navigate('SignUp')}
-            >
-              <Text style={styles.linkText}>
-                Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Enter password"
+              secureTextEntry
+              autoComplete="password"
+              editable={!loading}
+            />
           </View>
 
           <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleSignIn}
+            disabled={loading}
           >
-            <Text style={styles.backButtonText}>Back</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Sign In</Text>
+            )}
           </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </SignedOut>
-      <SignedIn>
-        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator size="large" />
-          <Text style={[styles.subtitle, { marginTop: 16 }]}>Already signed in. Redirecting...</Text>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.oauthButton, styles.googleButton]}
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+          >
+            <Ionicons name="logo-google" size={20} color="#fff" />
+            <Text style={styles.oauthButtonText}>Sign in with Google</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => navigation.navigate('SignUp')}
+          >
+            <Text style={styles.linkText}>
+              Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
-      </SignedIn>
+
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -363,7 +239,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   backButton: {
-    marginTop: 'auto',
+    marginTop: 20,
     padding: 16,
     alignItems: 'center',
   },
@@ -371,22 +247,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#2563eb',
   },
-  oauthContainer: {
-    marginTop: 8,
-    gap: 12,
-  },
-  oauthLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
-    textAlign: 'center',
-  },
-  oauthButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
   oauthButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -396,9 +257,6 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     backgroundColor: '#4285F4',
-  },
-  microsoftButton: {
-    backgroundColor: '#00A4EF',
   },
   oauthButtonText: {
     color: '#fff',

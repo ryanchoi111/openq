@@ -17,20 +17,19 @@ const IMAGE_CONTENT_TYPES: Record<string, string> = {
   webp: 'image/webp',
 };
 
-const { data: { session } } = await supabase.auth.getSession();
-  const accessToken = session?.access_token;
-  if (!accessToken) {
-    throw new Error('No active session for storage upload');
-}
-
-
-
 async function uploadToStorage(
   bucket: string,
   filePath: string,
   fileUri: string,
   contentType: string
 ): Promise<string> {
+  // Get session token for storage upload
+  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) {
+    throw new Error('No active session for storage upload');
+  }
+
   const formData = new FormData();
   formData.append('file', {
     uri: fileUri,

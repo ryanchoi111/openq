@@ -6,7 +6,6 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
-import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 import { useAuth } from '../contexts/AuthContext';
 import { AuthStackParamList } from './types';
@@ -20,19 +19,16 @@ const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 // Protected Auth Screen Wrapper
 // Redirects to home if user is already signed in
-const ProtectedAuthScreen = ({ 
-  component: Component, 
-  ...props 
-}: { 
+const ProtectedAuthScreen = ({
+  component: Component,
+  ...props
+}: {
   component: React.ComponentType<any>;
   [key: string]: any;
 }) => {
-  const { isSignedIn } = useClerkAuth();
-  const { user, loading: authLoading } = useAuth();
+  const { user, isGuest, loading } = useAuth();
 
-  // Show loading only while auth context is loading
-  // Don't block on Clerk's isLoaded since the screen components handle that
-  if (authLoading) {
+  if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" />
@@ -40,9 +36,9 @@ const ProtectedAuthScreen = ({
     );
   }
 
-  // Don't render the screen if user is signed in (after loading is complete)
-  // The AppNavigator will handle redirecting to Main, but we prevent rendering here
-  if (isSignedIn || user) {
+  // Don't render if user is authenticated
+  const isAuthenticated = user && !isGuest;
+  if (isAuthenticated) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" />
@@ -50,7 +46,6 @@ const ProtectedAuthScreen = ({
     );
   }
 
-  // Render the screen - Clerk hooks inside will handle their own loading states
   return <Component {...props} />;
 };
 
