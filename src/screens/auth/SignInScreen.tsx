@@ -36,6 +36,12 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailAddress.trim())) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     setError('');
     setLoading(true);
 
@@ -44,7 +50,8 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
       // Navigation handled automatically by AppNavigator
     } catch (err: any) {
       console.error('[SignIn] Error:', err);
-      const errorMessage = err.message || 'Sign-in failed. Please check your credentials.';
+      // Use generic message to prevent account enumeration
+      const errorMessage = 'Invalid email or password. Please try again.';
       setError(errorMessage);
       Alert.alert('Sign In Failed', errorMessage);
     } finally {

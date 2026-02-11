@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '../config/supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { WaitlistEntry, GuestUser, User } from '../types';
 
 interface JoinWaitlistParams {
@@ -84,14 +84,14 @@ export const waitlistService = {
 
       if (error) throw error;
 
-      // For guests, store the entry ID in AsyncStorage so they can view their history
+      // For guests, store the entry ID in SecureStore so they can view their history
       if (user.role === 'guest') {
         try {
-          const key = `@guest_waitlist_history:${user.id}`;
-          const existing = await AsyncStorage.getItem(key);
+          const key = `guest_waitlist_history_${user.id}`;
+          const existing = await SecureStore.getItemAsync(key);
           const entries = existing ? JSON.parse(existing) : [];
           entries.push(data.id);
-          await AsyncStorage.setItem(key, JSON.stringify(entries));
+          await SecureStore.setItemAsync(key, JSON.stringify(entries));
         } catch (storageError) {
           console.error('Error storing guest history:', storageError);
           // Don't throw - entry was created successfully
@@ -133,10 +133,10 @@ export const waitlistService = {
    */
   async getUserWaitlistHistory(userId: string, isGuest: boolean = false): Promise<any[]> {
     try {
-      // For guests, retrieve entry IDs from AsyncStorage
+      // For guests, retrieve entry IDs from SecureStore
       if (isGuest) {
-        const key = `@guest_waitlist_history:${userId}`;
-        const storedEntries = await AsyncStorage.getItem(key);
+        const key = `guest_waitlist_history_${userId}`;
+        const storedEntries = await SecureStore.getItemAsync(key);
         
         if (!storedEntries) {
           console.log('[getUserWaitlistHistory] No stored entries for guest');

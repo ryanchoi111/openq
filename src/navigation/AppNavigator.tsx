@@ -271,23 +271,7 @@ export const AppNavigator = () => {
     );
   }
 
-  // Check if user is authenticated (not guest)
   const isAuthenticated = user && !isGuest;
-
-  console.log('');
-  console.log('┌────────────────────────────────────┐');
-  console.log('│  [AppNavigator] RENDER             │');
-  console.log('└────────────────────────────────────┘');
-  console.log('[AppNavigator] Auth state:', {
-    hasUser: !!user,
-    userId: user?.id,
-    userRole: (user as any)?.role,
-    isGuest,
-    isAuthenticated,
-    loading,
-  });
-  console.log('[AppNavigator] Will show:', isAuthenticated ? 'HOME SCREEN' : 'AUTH SCREEN');
-  console.log('');
 
   return (
     <NavigationContainer>

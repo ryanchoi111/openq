@@ -2,6 +2,25 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
+// Allowed origins for CORS - restrict to your app domains only
+const ALLOWED_ORIGINS = [
+  'http://localhost:8081',
+  'http://127.0.0.1:8081',
+  // TODO: Add your production domain(s) when deploying:
+  // 'https://your-app-domain.com',
+  // 'exp://192.168.1.3:8081', // Add your development IPs as needed
+];
+
+// Helper to get CORS headers with origin validation
+const getCorsHeaders = (origin: string | null) => {
+  const isAllowed = origin && ALLOWED_ORIGINS.includes(origin);
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Methods': 'POST',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+};
+
 interface EmailRecipient {
   email: string;
   name: string;
@@ -20,14 +39,12 @@ interface EmailRequest {
 }
 
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
+      headers: getCorsHeaders(origin),
     });
   }
 
@@ -170,7 +187,7 @@ Deno.serve(async (req: Request) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...getCorsHeaders(origin),
         },
         status: failed.length === 0 ? 200 : 207, // 207 Multi-Status if some failed
       }
@@ -185,7 +202,7 @@ Deno.serve(async (req: Request) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...getCorsHeaders(origin),
         },
         status: 500,
       }

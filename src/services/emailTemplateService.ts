@@ -66,12 +66,14 @@ export const emailTemplateService = {
 
   /**
    * Replace template placeholders with actual data
+   * Uses split/join instead of replace() to prevent regex injection
    */
   replaceTemplatePlaceholders(template: string, data: TemplateData): string {
-    return template
-      .replace(/\{\$NAME_OF_TENANT\}/g, data.tenantName)
-      .replace(/\{\$ADDRESS_OF_INTERESTED_HOUSE\}/g, data.propertyAddress)
-      .replace(/\{\$NAME_OF_AGENT\}/g, data.agentName);
+    let result = template;
+    result = result.split('{$NAME_OF_TENANT}').join(data.tenantName);
+    result = result.split('{$ADDRESS_OF_INTERESTED_HOUSE}').join(data.propertyAddress);
+    result = result.split('{$NAME_OF_AGENT}').join(data.agentName);
+    return result;
   },
 
   /**

@@ -18,16 +18,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
-import { supabase } from '../../config/supabase';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
 const SignUpScreen: React.FC<Props> = ({ navigation }) => {
-  const { signUpWithEmail, signInWithGoogle, refreshUserProfile } = useAuth();
+  const { signUpWithEmail, signInWithGoogle } = useAuth();
 
   const [name, setName] = useState('');
   const [emailAddress, setEmailAddress] = useState('');
@@ -39,6 +37,12 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const handleSignUp = async () => {
     if (!name.trim() || !emailAddress.trim() || !password.trim()) {
       setError('Please fill in all fields');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailAddress.trim())) {
+      setError('Please enter a valid email address');
       return;
     }
 
@@ -55,7 +59,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       // Navigation handled automatically by AppNavigator
     } catch (err: any) {
       console.error('[SignUp] Error:', err);
-      const errorMessage = err.message || 'Sign-up failed. Please try again.';
+      // Use generic message to prevent information leakage
+      const errorMessage = 'Sign-up failed. Please try again or contact support.';
       setError(errorMessage);
       Alert.alert('Sign Up Failed', errorMessage);
     } finally {
@@ -64,25 +69,13 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleGoogleSignUp = async () => {
-    console.log('═══════════════════════════════════════');
-    console.log('🚀 [SignUpScreen] Google OAuth STARTED');
-    console.log('[SignUpScreen] Selected role:', role);
-    console.log('═══════════════════════════════════════');
-
     try {
       setLoading(true);
-      console.log('[SignUpScreen] Loading state set to true');
-
-      console.log('[SignUpScreen] Calling signInWithGoogle()...');
       await signInWithGoogle(role);
-      console.log('✅ [SignUpScreen] signInWithGoogle() completed');
     } catch (error: any) {
-      console.error('❌ [SignUpScreen] Google OAuth error:', error);
-
       const errorMessage = error.message || 'Failed to sign up with Google';
       Alert.alert('Google Sign Up Failed', errorMessage);
     } finally {
-      console.log('[SignUpScreen] Setting loading to false');
       setLoading(false);
     }
   };

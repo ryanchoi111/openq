@@ -33,8 +33,19 @@ const GuestJoinScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
+    if (name.trim().length > 100) {
+      Alert.alert('Invalid Name', 'Name must be 100 characters or less');
+      return;
+    }
+
     if (!email.trim()) {
       Alert.alert('Required', 'Please enter your email address');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
       return;
     }
 

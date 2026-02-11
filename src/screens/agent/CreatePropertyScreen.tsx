@@ -48,6 +48,29 @@ const CreatePropertyScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
+    // Validate address field lengths
+    if (address.trim().length > 255) {
+      Alert.alert('Invalid Address', 'Address must be 255 characters or less');
+      return;
+    }
+
+    if (city.trim().length > 100) {
+      Alert.alert('Invalid City', 'City must be 100 characters or less');
+      return;
+    }
+
+    // Validate state format (2 uppercase letters)
+    if (!/^[A-Z]{2}$/.test(state.trim().toUpperCase())) {
+      Alert.alert('Invalid State', 'State must be 2 letters (e.g., CA, NY)');
+      return;
+    }
+
+    // Validate ZIP code format (5 digits)
+    if (!/^\d{5}$/.test(zip.trim())) {
+      Alert.alert('Invalid ZIP', 'ZIP code must be 5 digits');
+      return;
+    }
+
     // Validate required numeric fields
     if (!bedrooms || bedrooms.trim() === '') {
       Alert.alert('Required Field', 'Bedrooms is required');
@@ -90,7 +113,7 @@ const CreatePropertyScreen: React.FC<Props> = ({ navigation }) => {
         address: address.trim(),
         address2: address2.trim(),
         city: city.trim(),
-        state: state.trim(),
+        state: state.trim().toUpperCase(),
         zip: zip.trim(),
         bedrooms: bedroomsNum,
         bathrooms: bathroomsNum,

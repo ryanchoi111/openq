@@ -3,11 +3,8 @@
  * Handles user profile operations including file uploads
  */
 
-import { supabase } from '../config/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from '../config/supabase';
 import { User } from '../types';
-
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const IMAGE_CONTENT_TYPES: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -37,12 +34,12 @@ async function uploadToStorage(
     name: filePath.split('/').pop(),
   } as any);
 
-  const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${bucket}/${filePath}`;
+  const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`;
   const response = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'apikey': SUPABASE_ANON_KEY,
+      'apikey': supabaseAnonKey,
     },
     body: formData,
   });
