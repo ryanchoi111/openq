@@ -59,8 +59,9 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       // Navigation handled automatically by AppNavigator
     } catch (err: any) {
       console.error('[SignUp] Error:', err);
-      // Use generic message to prevent information leakage
-      const errorMessage = 'Sign-up failed. Please try again or contact support.';
+      const errorMessage = err.message?.includes('User already registered')
+        ? 'This email is already registered. Please sign in instead.'
+        : 'Sign-up failed. Please try again.';
       setError(errorMessage);
       Alert.alert('Sign Up Failed', errorMessage);
     } finally {
@@ -73,8 +74,8 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       setLoading(true);
       await signInWithGoogle(role);
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to sign up with Google';
-      Alert.alert('Google Sign Up Failed', errorMessage);
+      console.error('[SignUp] Google OAuth error:', error);
+      Alert.alert('Google Sign Up Failed', 'Google sign-up failed. Please try again.');
     } finally {
       setLoading(false);
     }

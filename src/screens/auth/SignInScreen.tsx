@@ -66,8 +66,7 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
       // Navigation handled automatically by AppNavigator
     } catch (error: any) {
       console.error('[SignIn] Google OAuth error:', error);
-      const errorMessage = error.message || 'Failed to sign in with Google';
-      Alert.alert('Sign In Failed', errorMessage);
+      Alert.alert('Sign In Failed', 'Google sign-in failed. Please try again.');
     } finally {
       setLoading(false);
     }

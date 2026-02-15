@@ -26,7 +26,6 @@ export const waitlistService = {
         .single();
 
       if (eventError) {
-        console.error('Error fetching event for validation:', eventError);
         throw new Error('Event not found');
       }
 
@@ -121,8 +120,6 @@ export const waitlistService = {
 
       if (error) throw error;
 
-      console.log('[getWaitlist] Raw data:', JSON.stringify(data, null, 2));
-
       return data as WaitlistEntry[];
     } catch (error) {
       console.error('Error fetching waitlist:', error);
@@ -141,14 +138,12 @@ export const waitlistService = {
         const storedEntries = await SecureStore.getItemAsync(key);
         
         if (!storedEntries) {
-          console.log('[getUserWaitlistHistory] No stored entries for guest');
           return [];
         }
 
         const entryIds = JSON.parse(storedEntries);
         
         if (!entryIds || entryIds.length === 0) {
-          console.log('[getUserWaitlistHistory] No entry IDs found for guest');
           return [];
         }
 
@@ -174,11 +169,9 @@ export const waitlistService = {
           .order('joined_at', { ascending: false });
 
         if (error) {
-          console.error('[getUserWaitlistHistory] Error fetching guest entries:', error);
           return [];
         }
 
-        console.log(`[getUserWaitlistHistory] Found ${data?.length || 0} entries for guest`);
         return data || [];
       }
 
@@ -206,19 +199,15 @@ export const waitlistService = {
       // Handle errors - PGRST116 means no rows found, which is fine
       if (error) {
         if (error.code === 'PGRST116') {
-          console.log('[getUserWaitlistHistory] No entries found for user');
           return [];
         }
-        console.error('[getUserWaitlistHistory] Database error:', error);
         throw error;
       }
 
       if (!data || data.length === 0) {
-        console.log('[getUserWaitlistHistory] No waitlist entries found');
         return [];
       }
 
-      console.log(`[getUserWaitlistHistory] Found ${data.length} entries`);
       return data;
     } catch (error) {
       console.error('[getUserWaitlistHistory] Error:', error);

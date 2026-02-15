@@ -106,7 +106,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('Success', 'Profile picture updated successfully!');
     } catch (error: any) {
       console.error('Error uploading profile picture:', error);
-      Alert.alert('Error', error.message || 'Failed to upload profile picture');
+      Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -140,7 +140,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       }
     } catch (error: any) {
       console.error('Error uploading application:', error);
-      Alert.alert('Error', error.message || 'Failed to upload housing application');
+      Alert.alert('Error', 'Failed to upload housing application. Please try again.');
     } finally {
       setUploadingApplication(false);
     }
@@ -164,7 +164,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               Alert.alert('Success', 'Your account has been deleted successfully.');
             } catch (error: any) {
               console.error('Error deleting account:', error);
-              Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
             }
           },
         },

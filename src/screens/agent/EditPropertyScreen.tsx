@@ -138,7 +138,7 @@ const EditPropertyScreen: React.FC<Props> = ({ navigation, route }) => {
       navigation.goBack();
     } catch (error: any) {
       console.error('Error updating property:', error);
-      Alert.alert('Error', error.message || 'Failed to update property');
+      Alert.alert('Error', 'Failed to update property. Please try again.');
     }
   };
 
@@ -158,7 +158,7 @@ const EditPropertyScreen: React.FC<Props> = ({ navigation, route }) => {
               navigation.goBack();
             } catch (error: any) {
               console.error('Error deleting property:', error);
-              Alert.alert('Error', error.message || 'Failed to delete property');
+              Alert.alert('Error', 'Failed to delete property. Please try again.');
             }
           },
         },

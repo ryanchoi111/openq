@@ -38,6 +38,18 @@ interface EmailRequest {
   agentEmail?: string;
 }
 
+const MAX_RECIPIENTS = 50;
+
+/** Escape HTML entities to prevent injection */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('origin');
 
@@ -75,6 +87,10 @@ Deno.serve(async (req: Request) => {
       throw new Error('No recipients provided');
     }
 
+    if (recipients.length > MAX_RECIPIENTS) {
+      throw new Error(`Too many recipients. Maximum is ${MAX_RECIPIENTS}.`);
+    }
+
     if (!eventId || !propertyId) {
       throw new Error('Event ID and Property ID are required');
     }
@@ -86,7 +102,7 @@ Deno.serve(async (req: Request) => {
       recipients.map(async (recipient) => {
         const emailContent = `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            ${recipient.emailBody.replace(/\n/g, '<br>')}
+            ${escapeHtml(recipient.emailBody).replace(/\n/g, '<br>')}
             ${applicationUrl ? `<br><br><p><strong>Housing Application:</strong> <a href="${applicationUrl}" style="color: #2563eb; text-decoration: none;">Download PDF</a></p>` : ''}
             ${agentEmail ? `<br><br><p style="font-size: 12px; color: #666;">Reply to: <a href="mailto:${agentEmail}" style="color: #2563eb;">${agentEmail}</a></p>` : ''}
           </div>

@@ -30,7 +30,7 @@ const TenantHomeScreen: React.FC<Props> = ({ navigation }) => {
               Alert.alert('Success', 'Your account has been deleted successfully.');
             } catch (error: any) {
               console.error('Error deleting account:', error);
-              Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
             }
           },
         },

@@ -125,7 +125,7 @@ const CreatePropertyScreen: React.FC<Props> = ({ navigation }) => {
       navigation.goBack();
     } catch (error: any) {
       console.error('Error creating property:', error);
-      Alert.alert('Error', error.message || 'Failed to create property');
+      Alert.alert('Error', 'Failed to create property. Please try again.');
     }
   };
 

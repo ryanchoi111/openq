@@ -127,8 +127,6 @@ export const propertyService = {
         (property: Property) => !busyPropertyIds.has(property.id)
       ) || [];
 
-      console.log(`[getAvailablePropertiesForEvent] Total properties: ${properties?.length}, Busy: ${busyPropertyIds.size}, Available: ${availableProperties.length}`);
-
       return availableProperties as Property[];
     } catch (error) {
       console.error('Error fetching available properties:', error);

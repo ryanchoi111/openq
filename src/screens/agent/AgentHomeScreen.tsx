@@ -86,7 +86,7 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
               loadAllEvents();
             } catch (error: any) {
               console.error('Error deleting event:', error);
-              Alert.alert('Error', error.message || 'Failed to delete open house');
+              Alert.alert('Error', 'Failed to delete open house. Please try again.');
             }
           },
         },

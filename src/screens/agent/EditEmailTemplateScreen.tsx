@@ -72,7 +72,7 @@ const EditEmailTemplateScreen: React.FC<Props> = ({ navigation }) => {
       ]);
     } catch (error: any) {
       console.error('Error saving template:', error);
-      Alert.alert('Error', error.message || 'Failed to save email template');
+      Alert.alert('Error', 'Failed to save email template. Please try again.');
     } finally {
       setSaving(false);
     }

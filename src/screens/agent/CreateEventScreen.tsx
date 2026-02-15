@@ -44,28 +44,16 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
   // Reload properties whenever the screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      console.log('[CreateEventScreen] Screen focused, loading properties');
       loadProperties();
     }, [user?.id])
   );
 
   const loadProperties = async () => {
-    if (!user?.id) {
-      console.log('[CreateEventScreen] No user ID, skipping property load');
-      return;
-    }
-    
-    console.log('[CreateEventScreen] Loading properties for user:', user.id);
-    
+    if (!user?.id) return;
+
     try {
       // Only load properties that don't have active or scheduled open house events
       const data = await propertyService.getAvailablePropertiesForEvent(user.id);
-      
-      console.log('[CreateEventScreen] Loaded properties:', {
-        count: data.length,
-        properties: data.map(p => ({ id: p.id, address: p.address }))
-      });
-      
       setProperties(data);
       
       // if (data.length === 0) {
@@ -121,7 +109,7 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
       }
     } catch (error: any) {
       console.error('[CreateEventScreen] Error:', error);
-      Alert.alert('Error', error.message || 'Failed to create open house');
+      Alert.alert('Error', 'Failed to create open house. Please try again.');
     }
   };
 

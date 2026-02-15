@@ -87,7 +87,7 @@ const ScanQRScreen: React.FC<Props> = ({ navigation }) => {
       // Navigate to waitlist view
       navigation.replace('WaitlistView', { eventId, entryId: entry.id });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to join waitlist');
+      Alert.alert('Error', 'Failed to join waitlist. Please try again.');
       setTimeout(() => setScanned(false), 2000);
     }
   };

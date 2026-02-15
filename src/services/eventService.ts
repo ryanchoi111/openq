@@ -19,8 +19,6 @@ export const eventService = {
    */
   async createEvent(params: CreateEventParams): Promise<OpenHouseEvent> {
     try {
-      console.log('[createEvent] Creating event for agent:', params.agentId);
-      
       // Backend validation: Check if property already has an active or scheduled event
       const { data: existingEvents, error: checkError } = await supabase
         .from('open_house_events')
@@ -37,8 +35,6 @@ export const eventService = {
       // Determine initial status based on start time
       const now = new Date().toISOString();
       const initialStatus = params.startTime > now ? 'scheduled' : 'active';
-      
-      console.log('[createEvent] Event status:', initialStatus, 'Start:', params.startTime, 'Now:', now);
       
       const { data, error } = await supabase
         .from('open_house_events')
@@ -67,7 +63,6 @@ export const eventService = {
 
       if (updateError) throw updateError;
 
-      console.log('[createEvent] Event created successfully:', updatedData.id);
       return updatedData as OpenHouseEvent;
     } catch (error) {
       console.error('Error creating event:', error);
@@ -120,9 +115,6 @@ export const eventService = {
    */
   async getActiveEvent(agentId: string): Promise<OpenHouseEvent[]> {
     try {
-      console.log('[getActiveEvent] Starting query for agent:', agentId);
-      const startTime = Date.now();
-      
       // Get ALL active events for the agent
       const queryPromise = supabase
         .from('open_house_events')
@@ -138,27 +130,18 @@ export const eventService = {
         }, 30000);
       });
       
-      console.log('[getActiveEvent] Starting Promise.race...');
-      
       // Race the query against the timeout
       const result = await Promise.race([
         queryPromise,
         timeoutPromise
       ]);
       
-      console.log('[getActiveEvent] Promise.race resolved!');
-      console.log('[getActiveEvent] Result:', JSON.stringify(result, null, 2));
-      
       const { data, error } = result as any;
-      
-      const duration = Date.now() - startTime;
-      console.log(`[getActiveEvent] Query completed in ${duration}ms`);
       
       // Handle errors
       if (error) {
         // PGRST116 means no rows found, which is fine - return empty array
         if (error.code === 'PGRST116') {
-          console.log('[getActiveEvent] No active events found (PGRST116)');
           return [];
         }
         console.error('[getActiveEvent] Database error:', error);
@@ -166,18 +149,15 @@ export const eventService = {
       }
       
       if (!data || data.length === 0) {
-        console.log('[getActiveEvent] No active events found');
         return [];
       }
-      
-      console.log('[getActiveEvent] Found', data.length, 'active event(s)');
+
       return data as OpenHouseEvent[];
       
     } catch (error: any) {
       console.error('[getActiveEvent] Error:', error);
       
       if (error?.message?.includes('timeout')) {
-        console.warn('[getActiveEvent] Query timed out, returning empty array');
         return [];
       }
       
@@ -244,7 +224,6 @@ export const eventService = {
         .eq('id', eventId);
 
       if (error) throw error;
-      console.log(`[deleteEvent] Event ${eventId} deleted successfully.`);
     } catch (error) {
       console.error('[deleteEvent] Error deleting event:', error);
       throw error;
@@ -263,13 +242,11 @@ export const eventService = {
       
       // Transition scheduled -> active
       if (event.status === 'scheduled' && event.start_time <= now) {
-        console.log(`[checkAndTransitionEventStatus] Transitioning event ${eventId} from scheduled to active`);
         return await this.updateEventStatus(eventId, 'active');
       }
-      
+
       // Transition active -> completed
       if (event.status === 'active' && event.end_time <= now) {
-        console.log(`[checkAndTransitionEventStatus] Transitioning event ${eventId} from active to completed`);
         return await this.updateEventStatus(eventId, 'completed');
       }
       
@@ -287,18 +264,11 @@ export const eventService = {
     try {
       const events = await this.getAgentEvents(agentId);
       const now = new Date().toISOString();
-      
-      console.log(`[checkAndTransitionAllAgentEvents] Checking ${events.length} events for agent ${agentId}`);
-      
+
       for (const event of events) {
-        // Transition scheduled -> active
         if (event.status === 'scheduled' && event.start_time <= now) {
-          console.log(`[checkAndTransitionAllAgentEvents] Transitioning event ${event.id} from scheduled to active`);
           await this.updateEventStatus(event.id, 'active');
-        } 
-        // Transition active -> completed
-        else if (event.status === 'active' && event.end_time <= now) {
-          console.log(`[checkAndTransitionAllAgentEvents] Transitioning event ${event.id} from active to completed`);
+        } else if (event.status === 'active' && event.end_time <= now) {
           await this.updateEventStatus(event.id, 'completed');
         }
       }
@@ -316,8 +286,6 @@ export const eventService = {
     active: OpenHouseEvent[];
   }> {
     try {
-      console.log('[getEventsByAgent] Fetching and categorizing events for agent:', agentId);
-      
       // First, transition any events that need status changes
       await this.checkAndTransitionAllAgentEvents(agentId);
       
@@ -337,9 +305,7 @@ export const eventService = {
       // Categorize events
       const scheduled = events.filter(e => e.status === 'scheduled' && e.start_time > now);
       const active = events.filter(e => e.status === 'active');
-      
-      console.log(`[getEventsByAgent] Found ${scheduled.length} scheduled, ${active.length} active events`);
-      
+
       return { scheduled, active };
     } catch (error) {
       console.error('[getEventsByAgent] Error:', error);
@@ -361,7 +327,6 @@ export const eventService = {
       
       if (error) throw error;
       
-      console.log(`[getCompletedEvents] Found ${data?.length || 0} completed events`);
       return data as OpenHouseEvent[];
     } catch (error) {
       console.error('[getCompletedEvents] Error:', error);

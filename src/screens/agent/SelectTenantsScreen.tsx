@@ -139,7 +139,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                 ]
               );
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to send application');
+              Alert.alert('Error', 'Failed to send application. Please try again.');
             } finally {
               setSending(false);
             }
