@@ -15,6 +15,21 @@ async function gatherRecipients(
   propertyAddress: string,
   agentName: string
 ): Promise<Recipient[]> {
+  // Batch-fetch all authenticated users in one query
+  const userIds = entries.filter(e => e.user_id).map(e => e.user_id);
+  const userMap = new Map<string, { email: string; name: string }>();
+
+  if (userIds.length > 0) {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, email, name')
+      .in('id', userIds);
+
+    for (const u of users || []) {
+      userMap.set(u.id, { email: u.email, name: u.name || 'User' });
+    }
+  }
+
   const recipients: Recipient[] = [];
 
   for (const entry of entries) {
@@ -22,14 +37,9 @@ async function gatherRecipients(
     let name: string | undefined;
 
     if (entry.user_id) {
-      const { data: user } = await supabase
-        .from('users')
-        .select('email, name')
-        .eq('id', entry.user_id)
-        .single();
-
-      email = user?.email;
-      name = user?.name || 'User';
+      const userData = userMap.get(entry.user_id);
+      email = userData?.email;
+      name = userData?.name || 'User';
     } else if (entry.guest_email) {
       email = entry.guest_email;
       name = entry.guest_name || 'Guest';

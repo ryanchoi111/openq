@@ -85,6 +85,26 @@ const EditPropertyScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
+    if (address.trim().length > 255) {
+      Alert.alert('Invalid Address', 'Address must be 255 characters or less');
+      return;
+    }
+
+    if (city.trim().length > 100) {
+      Alert.alert('Invalid City', 'City must be 100 characters or less');
+      return;
+    }
+
+    if (!/^[A-Z]{2}$/.test(state.trim().toUpperCase())) {
+      Alert.alert('Invalid State', 'State must be 2 letters (e.g., CA, NY)');
+      return;
+    }
+
+    if (!/^\d{5}$/.test(zip.trim())) {
+      Alert.alert('Invalid ZIP', 'ZIP code must be 5 digits');
+      return;
+    }
+
     // Validate required numeric fields
     if (!bedrooms || bedrooms.trim() === '') {
       Alert.alert('Required Field', 'Bedrooms is required');

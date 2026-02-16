@@ -65,8 +65,15 @@ Deno.serve(async (req: Request) => {
       throw new Error('RESEND_API_KEY is not set. Please configure it in Supabase Dashboard.');
     }
 
-    // Get Supabase client with auth from request
-    const authHeader = req.headers.get('Authorization')!;
+    // Validate auth header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Missing Authorization header' }),
+        { status: 401, headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) } }
+      );
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -95,6 +102,10 @@ Deno.serve(async (req: Request) => {
       throw new Error('Event ID and Property ID are required');
     }
 
+    if (applicationUrl && !applicationUrl.startsWith('https://')) {
+      throw new Error('Application URL must use HTTPS');
+    }
+
     const senderEmail = 'noreply@openqapp.xyz';
     const senderName = agentName || 'OpenQ';
 
@@ -103,8 +114,8 @@ Deno.serve(async (req: Request) => {
         const emailContent = `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
             ${escapeHtml(recipient.emailBody).replace(/\n/g, '<br>')}
-            ${applicationUrl ? `<br><br><p><strong>Housing Application:</strong> <a href="${applicationUrl}" style="color: #2563eb; text-decoration: none;">Download PDF</a></p>` : ''}
-            ${agentEmail ? `<br><br><p style="font-size: 12px; color: #666;">Reply to: <a href="mailto:${agentEmail}" style="color: #2563eb;">${agentEmail}</a></p>` : ''}
+            ${applicationUrl ? `<br><br><p><strong>Housing Application:</strong> <a href="${escapeHtml(applicationUrl)}" style="color: #2563eb; text-decoration: none;">Download PDF</a></p>` : ''}
+            ${agentEmail ? `<br><br><p style="font-size: 12px; color: #666;">Reply to: <a href="mailto:${escapeHtml(agentEmail)}" style="color: #2563eb;">${escapeHtml(agentEmail)}</a></p>` : ''}
           </div>
         `;
 

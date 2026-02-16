@@ -99,11 +99,11 @@ export const profileService = {
     const filePath = urlParts[1];
     const { error } = await supabase.storage
       .from('profile-pictures')
-      .remove([`profile-pictures/${filePath}`]);
+      .remove([filePath]);
 
     if (error) throw error;
 
-    await this.updateUserProfile(userId, { profile_picture: undefined });
+    await this.updateUserProfile(userId, { profile_picture: null } as any);
   },
 
   async uploadHousingApplicationDocument(userId: string, documentUri: string): Promise<string> {
