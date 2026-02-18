@@ -55,13 +55,6 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
       // Only load properties that don't have active or scheduled open house events
       const data = await propertyService.getAvailablePropertiesForEvent(user.id);
       setProperties(data);
-      
-      // if (data.length === 0) {
-      //   Alert.alert(
-      //     'No Available Properties',
-      //     'All your properties already have active or scheduled open house events. Complete or cancel existing events first.'
-      //   );
-      // }
     } catch (error) {
       console.error('[CreateEventScreen] Error loading properties:', error);
       Alert.alert('Error', 'Failed to load properties. Please try again.');

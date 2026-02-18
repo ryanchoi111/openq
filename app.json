@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.openq",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app needs access to your camera to scan QR codes for open house events."
+        "NSCameraUsageDescription": "This app needs access to your camera to scan QR codes for open house events.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select a profile picture."
       }
     },
     "android": {
@@ -28,7 +29,8 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "com.anonymous.openq"
     },
@@ -42,6 +44,12 @@
     "updates": {
       "enabled": false,
       "fallbackToCacheTimeout": 0
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2f8daf62-e547-43c1-8b7d-e93c4d38a2a2"
+      }
+    },
+    "owner": "openq-app"
   }
 }
