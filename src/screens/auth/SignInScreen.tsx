@@ -1,5 +1,5 @@
 /**
- * Sign In Screen - Clerk Implementation
+ * Sign In Screen - Supabase Auth Implementation
  */
 
 import React, { useState } from 'react';
@@ -16,29 +16,29 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useSignIn } from '@clerk/clerk-expo';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignIn'>;
 
 const SignInScreen: React.FC<Props> = ({ navigation }) => {
-  const { signIn, setActive, isLoaded } = useSignIn();
-  const { refreshUserProfile } = useAuth();
+  const { signInWithEmail, signInWithGoogle } = useAuth();
+
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Handle the submission of the sign-in form
   const handleSignIn = async () => {
-    if (!isLoaded) {
-      Alert.alert('Loading', 'Please wait...');
+    if (!emailAddress.trim() || !password.trim()) {
+      setError('Please enter email and password');
       return;
     }
 
-    if (!emailAddress.trim() || !password.trim()) {
-      setError('Please enter email and password');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailAddress.trim())) {
+      setError('Please enter a valid email address');
       return;
     }
 
@@ -46,31 +46,27 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // Start the sign-in process using the email and password provided
-      const signInAttempt = await signIn.create({
-        identifier: emailAddress.trim(),
-        password,
-      });
-
-      // If sign-in process is complete, set the created session as active
-      if (signInAttempt.status === 'complete') {
-        await setActive({ session: signInAttempt.createdSessionId });
-        
-        // Refresh user profile to sync with Supabase
-        await refreshUserProfile();
-      } else {
-        // If the status isn't complete, check why. User might need to
-        // complete further steps.
-        console.error(JSON.stringify(signInAttempt, null, 2));
-        Alert.alert('Verification Required', 'Please complete the verification process');
-      }
+      await signInWithEmail(emailAddress.trim(), password);
+      // Navigation handled automatically by AppNavigator
     } catch (err: any) {
-      // See https://clerk.com/docs/guides/development/custom-flows/error-handling
-      // for more info on error handling
-      console.error(JSON.stringify(err, null, 2));
-      const errorMessage = err.errors?.[0]?.message || err.message || 'Sign-in failed. Please check your credentials.';
+      console.error('[SignIn] Error:', err);
+      // Use generic message to prevent account enumeration
+      const errorMessage = 'Invalid email or password. Please try again.';
       setError(errorMessage);
       Alert.alert('Sign In Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setLoading(true);
+      await signInWithGoogle();
+      // Navigation handled automatically by AppNavigator
+    } catch (error: any) {
+      console.error('[SignIn] Google OAuth error:', error);
+      Alert.alert('Sign In Failed', 'Google sign-in failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -129,8 +125,23 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Continue</Text>
+              <Text style={styles.buttonText}>Sign In</Text>
             )}
+          </TouchableOpacity>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.oauthButton, styles.googleButton]}
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+          >
+            <Ionicons name="logo-google" size={20} color="#fff" />
+            <Text style={styles.oauthButtonText}>Sign in with Google</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -234,13 +245,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   backButton: {
-    marginTop: 'auto',
+    marginTop: 20,
     padding: 16,
     alignItems: 'center',
   },
   backButtonText: {
     fontSize: 16,
     color: '#2563eb',
+  },
+  oauthButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  googleButton: {
+    backgroundColor: '#4285F4',
+  },
+  oauthButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e2e8f0',
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
   },
 });
 

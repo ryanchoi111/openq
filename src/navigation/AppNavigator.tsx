@@ -9,21 +9,17 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 import { useAuth } from '../contexts/AuthContext';
 import { 
   RootStackParamList, 
-  AuthStackParamList, 
   TenantStackParamList, 
-  AgentStackParamList 
+  AgentStackParamList,
+  AgentTabParamList,
 } from './types';
 
-// Auth screens (to be created)
-import WelcomeScreen from '../screens/auth/WelcomeScreen';
-import SignInScreen from '../screens/auth/SignInScreen';
-import SignUpScreen from '../screens/auth/SignUpScreen';
-import GuestJoinScreen from '../screens/auth/GuestJoinScreen';
+// Auth Navigator
+import AuthNavigator from './AuthNavigator';
 
 // Tenant screens (to be created)
 import TenantHomeScreen from '../screens/tenant/TenantHomeScreen';
@@ -47,22 +43,9 @@ import SelectTenantsScreen from '../screens/agent/SelectTenantsScreen';
 import EditEmailTemplateScreen from '../screens/agent/EditEmailTemplateScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const TenantStack = createNativeStackNavigator<TenantStackParamList>();
-const AgentTabs = createBottomTabNavigator();
+const AgentTabs = createBottomTabNavigator<AgentTabParamList>();
 const AgentStack = createNativeStackNavigator<AgentStackParamList>();
-
-// Auth Navigator
-const AuthNavigator = () => {
-  return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-      <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
-      <AuthStack.Screen name="SignIn" component={SignInScreen} />
-      <AuthStack.Screen name="SignUp" component={SignUpScreen} />
-      <AuthStack.Screen name="GuestJoin" component={GuestJoinScreen} />
-    </AuthStack.Navigator>
-  );
-};
 
 // Tenant Navigator
 const TenantNavigator = () => {
@@ -111,6 +94,7 @@ const AgentTabNavigator = () => {
       screenOptions={{
         tabBarActiveTintColor: '#2563eb',
         tabBarInactiveTintColor: '#64748b',
+        tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: '#fff',
           borderTopWidth: 1,
@@ -119,10 +103,7 @@ const AgentTabNavigator = () => {
           paddingBottom: 8,
           paddingTop: 8,
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-        },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
         headerStyle: {
           backgroundColor: '#fff',
           borderBottomWidth: 1,
@@ -149,7 +130,6 @@ const AgentTabNavigator = () => {
         component={AgentHomeScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarLabel: '',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
@@ -160,7 +140,6 @@ const AgentTabNavigator = () => {
         component={PropertiesScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarLabel: '',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="business" size={size} color={color} />
           ),
@@ -171,7 +150,6 @@ const AgentTabNavigator = () => {
         component={CreateEventScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarLabel: '',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="add-circle" size={size} color={color} />
           ),
@@ -182,7 +160,6 @@ const AgentTabNavigator = () => {
         component={EventHistoryScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarLabel: '',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="time" size={size} color={color} />
           ),
@@ -193,7 +170,6 @@ const AgentTabNavigator = () => {
         component={ProfileScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarLabel: '',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-circle" size={size} color={color} />
           ),
@@ -272,13 +248,20 @@ const AgentNavigator = () => {
 const MainNavigator = () => {
   const { user } = useAuth();
 
-  // Directly return the appropriate navigator based on user role
-  return user?.role === 'agent' ? <AgentNavigator /> : <TenantNavigator />;
+  if (!user || user.role === 'guest') {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  return user.role === 'agent' ? <AgentNavigator /> : <TenantNavigator />;
 };
 
 // Root Navigator
 export const AppNavigator = () => {
-  const { user, loading } = useAuth();
+  const { user, isGuest, loading } = useAuth();
 
   if (loading) {
     return (
@@ -288,10 +271,12 @@ export const AppNavigator = () => {
     );
   }
 
+  const isAuthenticated = user && !isGuest;
+
   return (
     <NavigationContainer>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
+        {!isAuthenticated ? (
           <RootStack.Screen name="Auth" component={AuthNavigator} />
         ) : (
           <RootStack.Screen name="Main" component={MainNavigator} />

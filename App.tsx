@@ -3,27 +3,45 @@
  */
 
 import React from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ClerkProvider } from '@clerk/clerk-expo';
-import { tokenCache } from './src/utils/clerkTokenCache';
-import { clerkPublishableKey } from './src/config/clerk';
+import * as Font from 'expo-font';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 
 export default function App() {
-  if (!clerkPublishableKey) {
-    console.error('Clerk publishable key is missing. Please set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in your .env file.');
+  const [fontsLoaded, setFontsLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    async function loadFonts() {
+      try {
+        await Font.loadAsync(Ionicons.font);
+        setFontsLoaded(true);
+      } catch (e) {
+        console.error('Error loading fonts:', e);
+        // Still allow app to render even if fonts fail
+        setFontsLoaded(true);
+      }
+    }
+    loadFonts();
+  }, []);
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
   }
 
   return (
-    <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
-      <SafeAreaProvider>
-        <AuthProvider>
-          <AppNavigator />
-          <StatusBar style="light" translucent={false} />
-        </AuthProvider>
-      </SafeAreaProvider>
-    </ClerkProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <AppNavigator />
+        <StatusBar style="light" translucent={false} />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

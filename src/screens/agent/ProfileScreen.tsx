@@ -16,12 +16,13 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
+import { SignOutButton } from '../../components/SignOutButton';
 import { profileService } from '../../services/profileService';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Profile'>;
 
 const ProfileScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, signOut, refreshUserProfile } = useAuth();
+  const { user, refreshUserProfile, deleteAccount } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [uploadingApplication, setUploadingApplication] = useState(false);
 
@@ -105,7 +106,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('Success', 'Profile picture updated successfully!');
     } catch (error: any) {
       console.error('Error uploading profile picture:', error);
-      Alert.alert('Error', error.message || 'Failed to upload profile picture');
+      Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -139,10 +140,36 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       }
     } catch (error: any) {
       console.error('Error uploading application:', error);
-      Alert.alert('Error', error.message || 'Failed to upload housing application');
+      Alert.alert('Error', 'Failed to upload housing application. Please try again.');
     } finally {
       setUploadingApplication(false);
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone and will permanently delete all your data.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              Alert.alert('Success', 'Your account has been deleted successfully.');
+            } catch (error: any) {
+              console.error('Error deleting account:', error);
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!user) {
@@ -199,13 +226,6 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.infoCard}>
               <Text style={styles.label}>Email</Text>
               <Text style={styles.value}>{user.email}</Text>
-            </View>
-          )}
-
-          {user.phone && (
-            <View style={styles.infoCard}>
-              <Text style={styles.label}>Phone</Text>
-              <Text style={styles.value}>{user.phone}</Text>
             </View>
           )}
 
@@ -290,8 +310,19 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         )}
 
         {/* Sign Out Button */}
-        <TouchableOpacity style={styles.signOutButton} onPress={signOut}>
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
+        <SignOutButton
+          style={styles.signOutButton}
+          textStyle={styles.signOutButtonText}
+          text="Sign Out"
+        />
+
+        {/* Delete Account Button */}
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDeleteAccount}
+        >
+          <Ionicons name="trash-outline" size={20} color="#dc2626" />
+          <Text style={styles.deleteButtonText}>Delete Account</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -466,6 +497,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#dc2626',
+    backgroundColor: '#fff',
+    marginTop: 16,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#dc2626',
   },
 });
 

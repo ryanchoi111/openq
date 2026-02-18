@@ -90,16 +90,13 @@ const CompletedToursScreen: React.FC<Props> = ({ route }) => {
               <Text style={styles.position}>#{item.position}</Text>
               <View style={styles.info}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.name}>{item.guest_name || 'User'}</Text>
+                  <Text style={styles.name}>{item.guest_name || item.user?.name || `Guest #${item.position}`}</Text>
                   {item.expressed_interest && (
                     <Ionicons name="star" size={20} color="#fbbf24" style={styles.starIcon} />
                   )}
                 </View>
-                {item.guest_phone && (
-                  <Text style={styles.detail}>{item.guest_phone}</Text>
-                )}
-                {item.guest_email && (
-                  <Text style={styles.detail}>{item.guest_email}</Text>
+                {(item.guest_email || item.user?.email) && (
+                  <Text style={styles.detail}>{item.guest_email || item.user?.email}</Text>
                 )}
                 <Text style={styles.timestamp}>
                   Completed: {item.completed_at ? new Date(item.completed_at).toLocaleString() : 'N/A'}

@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '../config/supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { WaitlistEntry, GuestUser, User } from '../types';
 
 interface JoinWaitlistParams {
@@ -26,7 +26,6 @@ export const waitlistService = {
         .single();
 
       if (eventError) {
-        console.error('Error fetching event for validation:', eventError);
         throw new Error('Event not found');
       }
 
@@ -65,7 +64,6 @@ export const waitlistService = {
         ? {
             event_id: eventId,
             guest_name: user.name,
-            guest_phone: user.phone,
             guest_email: user.email,
             position: nextPosition,
             status: 'waiting' as const,
@@ -85,14 +83,14 @@ export const waitlistService = {
 
       if (error) throw error;
 
-      // For guests, store the entry ID in AsyncStorage so they can view their history
+      // For guests, store the entry ID in SecureStore so they can view their history
       if (user.role === 'guest') {
         try {
-          const key = `@guest_waitlist_history:${user.id}`;
-          const existing = await AsyncStorage.getItem(key);
+          const key = `guest_waitlist_history_${user.id}`;
+          const existing = await SecureStore.getItemAsync(key);
           const entries = existing ? JSON.parse(existing) : [];
           entries.push(data.id);
-          await AsyncStorage.setItem(key, JSON.stringify(entries));
+          await SecureStore.setItemAsync(key, JSON.stringify(entries));
         } catch (storageError) {
           console.error('Error storing guest history:', storageError);
           // Don't throw - entry was created successfully
@@ -107,13 +105,16 @@ export const waitlistService = {
   },
 
   /**
-   * Get all waitlist entries for an event
+   * Get all waitlist entries for an event (with user names for authenticated users)
    */
   async getWaitlist(eventId: string): Promise<WaitlistEntry[]> {
     try {
       const { data, error } = await supabase
         .from('waitlist_entries')
-        .select('*')
+        .select(`
+          *,
+          user:users(name, email)
+        `)
         .eq('event_id', eventId)
         .order('position', { ascending: true });
 
@@ -131,20 +132,18 @@ export const waitlistService = {
    */
   async getUserWaitlistHistory(userId: string, isGuest: boolean = false): Promise<any[]> {
     try {
-      // For guests, retrieve entry IDs from AsyncStorage
+      // For guests, retrieve entry IDs from SecureStore
       if (isGuest) {
-        const key = `@guest_waitlist_history:${userId}`;
-        const storedEntries = await AsyncStorage.getItem(key);
+        const key = `guest_waitlist_history_${userId}`;
+        const storedEntries = await SecureStore.getItemAsync(key);
         
         if (!storedEntries) {
-          console.log('[getUserWaitlistHistory] No stored entries for guest');
           return [];
         }
 
         const entryIds = JSON.parse(storedEntries);
         
         if (!entryIds || entryIds.length === 0) {
-          console.log('[getUserWaitlistHistory] No entry IDs found for guest');
           return [];
         }
 
@@ -170,11 +169,9 @@ export const waitlistService = {
           .order('joined_at', { ascending: false });
 
         if (error) {
-          console.error('[getUserWaitlistHistory] Error fetching guest entries:', error);
           return [];
         }
 
-        console.log(`[getUserWaitlistHistory] Found ${data?.length || 0} entries for guest`);
         return data || [];
       }
 
@@ -202,19 +199,15 @@ export const waitlistService = {
       // Handle errors - PGRST116 means no rows found, which is fine
       if (error) {
         if (error.code === 'PGRST116') {
-          console.log('[getUserWaitlistHistory] No entries found for user');
           return [];
         }
-        console.error('[getUserWaitlistHistory] Database error:', error);
         throw error;
       }
 
       if (!data || data.length === 0) {
-        console.log('[getUserWaitlistHistory] No waitlist entries found');
         return [];
       }
 
-      console.log(`[getUserWaitlistHistory] Found ${data.length} entries`);
       return data;
     } catch (error) {
       console.error('[getUserWaitlistHistory] Error:', error);
