@@ -51,7 +51,7 @@ export const eventService = {
       if (error) throw error;
 
       // Generate QR code data with event ID
-      const qrData = `openhouse://join/${data.id}`;
+      const qrData = `openq://join/${data.id}`;
 
       // Update event with QR code data
       const { data: updatedData, error: updateError } = await supabase

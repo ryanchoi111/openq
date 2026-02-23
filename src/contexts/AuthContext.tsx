@@ -261,7 +261,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (session) {
       const { error } = await supabase.rpc('delete_user_account');
-      if (error) throw new Error(`Failed to delete account: ${error.message}`);
+      if (error) throw new Error('Failed to delete account');
     } else {
       throw new Error('No active authentication session');
     }

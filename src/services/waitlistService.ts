@@ -87,10 +87,12 @@ export const waitlistService = {
       if (user.role === 'guest') {
         try {
           const key = `guest_waitlist_history_${user.id}`;
+          const MAX_GUEST_HISTORY = 40;
           const existing = await SecureStore.getItemAsync(key);
           const entries = existing ? JSON.parse(existing) : [];
           entries.push(data.id);
-          await SecureStore.setItemAsync(key, JSON.stringify(entries));
+          const trimmed = entries.slice(-MAX_GUEST_HISTORY);
+          await SecureStore.setItemAsync(key, JSON.stringify(trimmed));
         } catch (storageError) {
           console.error('Error storing guest history:', storageError);
           // Don't throw - entry was created successfully
