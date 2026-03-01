@@ -16,7 +16,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.openq",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app needs access to your camera to scan QR codes for open house events."
+        "NSCameraUsageDescription": "This app needs access to your camera to scan QR codes for open house events.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -27,7 +28,8 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "com.anonymous.openq"
     },
@@ -36,6 +38,11 @@
     },
     "plugins": [
       "expo-camera"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e4c2091c-a0fb-4939-9b27-68dcfa41c7e1"
+      }
+    }
   }
 }
