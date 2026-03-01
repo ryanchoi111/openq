@@ -6,9 +6,8 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const ALLOWED_ORIGINS = [
   'http://localhost:8081',
   'http://127.0.0.1:8081',
-  // TODO: Add your production domain(s) when deploying:
-  // 'https://your-app-domain.com',
-  // 'exp://192.168.1.3:8081', // Add your development IPs as needed
+  'https://openqapp.xyz',
+  'https://www.openqapp.xyz',
 ];
 
 // Helper to get CORS headers with origin validation

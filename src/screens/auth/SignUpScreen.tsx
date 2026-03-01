@@ -40,7 +40,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(emailAddress.trim())) {
       setError('Please enter a valid email address');
       return;
@@ -48,6 +48,11 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
     if (password.length < 8) {
       setError('Password must be at least 8 characters');
+      return;
+    }
+
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password needs uppercase, lowercase, and a number');
       return;
     }
 
@@ -171,7 +176,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Enter password (min. 8 characters)"
+                placeholder="Min 8 chars, upper/lowercase + number"
                 secureTextEntry
                 autoComplete="password-new"
                 editable={!loading}

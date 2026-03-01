@@ -241,9 +241,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Clean up secure storage
       await Promise.all([
-        SecureStore.deleteItemAsync(GUEST_USER_KEY).catch(() => {}),
-        SecureStore.deleteItemAsync('openhouse_oauth_role').catch(() => {}),
-        SecureStore.deleteItemAsync('openhouse_current_role').catch(() => {}),
+        SecureStore.deleteItemAsync(GUEST_USER_KEY).catch(e => console.error('[Auth] cleanup:', e)),
+        SecureStore.deleteItemAsync('openhouse_oauth_role').catch(e => console.error('[Auth] cleanup:', e)),
+        SecureStore.deleteItemAsync('openhouse_current_role').catch(e => console.error('[Auth] cleanup:', e)),
       ]);
 
       setUser(null);
@@ -268,9 +268,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Clean up secure storage
     await Promise.all([
-      SecureStore.deleteItemAsync(GUEST_USER_KEY).catch(() => {}),
-      SecureStore.deleteItemAsync('openhouse_oauth_role').catch(() => {}),
-      SecureStore.deleteItemAsync('openhouse_current_role').catch(() => {}),
+      SecureStore.deleteItemAsync(GUEST_USER_KEY).catch(e => console.error('[Auth] cleanup:', e)),
+      SecureStore.deleteItemAsync('openhouse_oauth_role').catch(e => console.error('[Auth] cleanup:', e)),
+      SecureStore.deleteItemAsync('openhouse_current_role').catch(e => console.error('[Auth] cleanup:', e)),
     ]);
 
     await signOut();

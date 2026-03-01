@@ -13,7 +13,12 @@
     "start": "npx expo start",
     "android": "npx expo run:android",
     "ios": "npx expo run:ios",
-    "web": "npx expo start --web"
+    "web": "npx expo start --web",
+    "type-check": "tsc --noEmit",
+    "build:android": "eas build --platform android --profile production",
+    "build:ios": "eas build --platform ios --profile production",
+    "lint": "eslint src/ --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -46,7 +51,14 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
     "dotenv": "^17.2.3",
+    "eslint": "^9.39.3",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "prettier": "^3.8.1",
     "shadcn": "^3.5.0",
     "typescript": "~5.9.2"
   },

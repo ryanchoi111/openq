@@ -35,10 +35,14 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
   }, []);
 
   const loadWaitlist = async () => {
-    const data = await waitlistService.getWaitlist(eventId);
-    // Filter out completed tours - they should appear in the Completed Tours screen
-    const activeQueue = data.filter((entry) => entry.status !== 'completed');
-    setWaitlist(activeQueue);
+    try {
+      const data = await waitlistService.getWaitlist(eventId);
+      const activeQueue = data.filter((entry) => entry.status !== 'completed');
+      setWaitlist(activeQueue);
+    } catch (error) {
+      console.error('[EventDashboard] Failed to load waitlist:', error);
+      Alert.alert('Error', 'Failed to load waitlist. Pull down to retry.');
+    }
   };
 
   const handleCallNext = async () => {
@@ -48,12 +52,19 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
 
-    await waitlistService.updateEntryStatus(nextPerson.id, 'touring');
-    // TODO: Send push notification
+    try {
+      await waitlistService.updateEntryStatus(nextPerson.id, 'touring');
+    } catch {
+      Alert.alert('Error', 'Failed to call next');
+    }
   };
 
   const handleComplete = async (entryId: string) => {
-    await waitlistService.updateEntryStatus(entryId, 'completed');
+    try {
+      await waitlistService.updateEntryStatus(entryId, 'completed');
+    } catch {
+      Alert.alert('Error', 'Failed to complete tour');
+    }
   };
 
   return (

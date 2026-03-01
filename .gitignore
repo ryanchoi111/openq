@@ -47,6 +47,7 @@ yarn-error.*
 !ARCHITECTURE.md
 !PROJECT_SUMMARY.md
 .cursor/
+supabase/.temp/
 *.json
 !app.json
 !package.json
