@@ -1,5 +1,5 @@
 /**
- * Sign Up Screen - Clerk Implementation
+ * Sign Up Screen - Supabase Auth Implementation
  */
 
 import React, { useState } from 'react';
@@ -18,39 +18,31 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { useSignUp, useOAuth } from '@clerk/clerk-expo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
-import { supabase } from '../../config/supabase';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
 const SignUpScreen: React.FC<Props> = ({ navigation }) => {
-  const { isLoaded, signUp, setActive } = useSignUp();
-  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
-  const { startOAuthFlow: startMicrosoftOAuth } = useOAuth({ strategy: 'oauth_microsoft' });
-  const { refreshUserProfile } = useAuth();
-  
+  const { signUpWithEmail, signInWithGoogle } = useAuth();
+
   const [name, setName] = useState('');
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('tenant');
-  const [pendingVerification, setPendingVerification] = useState(false);
-  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Handle submission of sign-up form
   const handleSignUp = async () => {
-    if (!isLoaded) {
-      Alert.alert('Loading', 'Please wait...');
+    if (!name.trim() || !emailAddress.trim() || !password.trim()) {
+      setError('Please fill in all fields');
       return;
     }
 
-    if (!name.trim() || !emailAddress.trim() || !password.trim()) {
-      setError('Please fill in all fields');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailAddress.trim())) {
+      setError('Please enter a valid email address');
       return;
     }
 
@@ -63,25 +55,13 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // Start sign-up process using email and password provided
-      await signUp.create({
-        emailAddress: emailAddress.trim(),
-        password,
-        firstName: name.trim().split(' ')[0],
-        lastName: name.trim().split(' ').slice(1).join(' ') || '',
-      });
-
-      // Send user an email with verification code
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-
-      // Set 'pendingVerification' to true to display second form
-      // and capture OTP code
-      setPendingVerification(true);
+      await signUpWithEmail(emailAddress.trim(), password, name.trim(), role);
+      // Navigation handled automatically by AppNavigator
     } catch (err: any) {
-      // See https://clerk.com/docs/guides/development/custom-flows/error-handling
-      // for more info on error handling
-      console.error(JSON.stringify(err, null, 2));
-      const errorMessage = err.errors?.[0]?.message || err.message || 'Sign-up failed. Please try again.';
+      console.error('[SignUp] Error:', err);
+      const errorMessage = err.message?.includes('User already registered')
+        ? 'This email is already registered. Please sign in instead.'
+        : 'Sign-up failed. Please try again.';
       setError(errorMessage);
       Alert.alert('Sign Up Failed', errorMessage);
     } finally {
@@ -89,183 +69,17 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  // Handle submission of verification form
-  const handleVerify = async () => {
-    if (!isLoaded) {
-      Alert.alert('Loading', 'Please wait...');
-      return;
-    }
-
-    if (!code.trim()) {
-      setError('Please enter the verification code');
-      return;
-    }
-
-    setError('');
-    setLoading(true);
-
-    try {
-      // Use the code the user provided to attempt verification
-      const signUpAttempt = await signUp.attemptEmailAddressVerification({
-        code: code.trim(),
-      });
-
-      // If verification was completed, set the session to active
-      if (signUpAttempt.status === 'complete') {
-        await setActive({ session: signUpAttempt.createdSessionId });
-
-        // Sync user with Supabase database
-        const clerkUser = signUpAttempt.createdUserId;
-        if (clerkUser) {
-          // Create user profile in Supabase
-          const { error: supabaseError } = await supabase
-            .from('users')
-            .upsert({
-              id: clerkUser,
-              email: emailAddress.trim(),
-              name: name.trim(),
-              role: role,
-              updated_at: new Date().toISOString(),
-            }, {
-              onConflict: 'id',
-            });
-
-          if (supabaseError) {
-            console.error('Error syncing user to Supabase:', supabaseError);
-          }
-
-          // Refresh user profile
-          await refreshUserProfile();
-        }
-      } else {
-        // If the status is not complete, check why. User may need to
-        // complete further steps.
-        console.error(JSON.stringify(signUpAttempt, null, 2));
-        Alert.alert('Verification Incomplete', 'Please complete all required steps');
-      }
-    } catch (err: any) {
-      // See https://clerk.com/docs/guides/development/custom-flows/error-handling
-      // for more info on error handling
-      console.error(JSON.stringify(err, null, 2));
-      const errorMessage = err.errors?.[0]?.message || err.message || 'Invalid code';
-      setError(errorMessage);
-      Alert.alert('Verification Failed', errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOAuthSignUp = async (strategy: 'oauth_google' | 'oauth_microsoft') => {
-    if (!isLoaded) {
-      Alert.alert('Loading', 'Please wait...');
-      return;
-    }
-
+  const handleGoogleSignUp = async () => {
     try {
       setLoading(true);
-      
-      // Store the role temporarily so we can assign it after OAuth completes
-      await AsyncStorage.setItem('@openhouse:oauth_role', role);
-      
-      const startOAuth = strategy === 'oauth_google' ? startGoogleOAuth : startMicrosoftOAuth;
-      
-      const result = await startOAuth();
-
-      if (result.createdSessionId) {
-        // Set the active session using the OAuth result's setActive
-        if (result.setActive) {
-          await result.setActive({ session: result.createdSessionId });
-        }
-
-        // Wait a moment for user data to be available
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Get user ID from the result
-        // Note: createdUserId might not be in the result, we'll get it from Clerk user hook
-        // For now, we'll sync after refreshUserProfile gets the user data
-        
-        // Refresh user profile - this will fetch the actual user data from Clerk and sync with Supabase
-        await refreshUserProfile();
-      }
+      await signInWithGoogle(role);
     } catch (error: any) {
-      console.error('OAuth sign up error:', error);
-      await AsyncStorage.removeItem('@openhouse:oauth_role');
-      if (error.errors?.[0]?.code !== 'form_identifier_exists') {
-        Alert.alert(
-          'Sign Up Failed',
-          error.errors?.[0]?.message || error.message || `Failed to sign in with ${strategy === 'oauth_google' ? 'Google' : 'Microsoft'}`
-        );
-      }
-      // If user already exists, they'll be signed in automatically
+      console.error('[SignUp] Google OAuth error:', error);
+      Alert.alert('Google Sign Up Failed', 'Google sign-up failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-
-  // Show verification form if pending verification
-  if (pendingVerification) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.content}
-        >
-          <View style={styles.header}>
-            <Text style={styles.title}>Verify your email</Text>
-            <Text style={styles.subtitle}>
-              We sent a verification code to {emailAddress}
-            </Text>
-          </View>
-
-          <View style={styles.form}>
-            {error ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Verification Code</Text>
-              <TextInput
-                style={styles.input}
-                value={code}
-                onChangeText={setCode}
-                placeholder="Enter your verification code"
-                keyboardType="number-pad"
-                autoCapitalize="none"
-                editable={!loading}
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleVerify}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Verify</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.linkButton}
-              onPress={() => {
-                setPendingVerification(false);
-                setCode('');
-                setError('');
-              }}
-            >
-              <Text style={styles.linkText}>
-                <Text style={styles.linkBold}>Back to sign up</Text>
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -285,6 +99,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>I am a...</Text>
               <View style={styles.roleContainer}>
@@ -332,6 +147,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                 placeholder="John Doe"
                 autoCapitalize="words"
                 autoComplete="name"
+                editable={!loading}
               />
             </View>
 
@@ -362,35 +178,6 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               />
             </View>
 
-            {role === 'agent' && (
-              <View style={styles.oauthContainer}>
-                <Text style={styles.oauthLabel}>Or sign up with:</Text>
-                <View style={styles.oauthButtons}>
-                  <TouchableOpacity
-                    style={[styles.oauthButton, styles.googleButton]}
-                    onPress={() => handleOAuthSignUp('oauth_google')}
-                    disabled={loading}
-                  >
-                    <Ionicons name="logo-google" size={20} color="#fff" />
-                    <Text style={styles.oauthButtonText}>Google</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.oauthButton, styles.microsoftButton]}
-                    onPress={() => handleOAuthSignUp('oauth_microsoft')}
-                    disabled={loading}
-                  >
-                    <Ionicons name="logo-microsoft" size={20} color="#fff" />
-                    <Text style={styles.oauthButtonText}>Microsoft</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-              </View>
-            )}
-
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
               onPress={handleSignUp}
@@ -402,6 +189,22 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.buttonText}>Sign Up</Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.oauthButton, styles.googleButton]}
+              onPress={handleGoogleSignUp}
+              disabled={loading}
+            >
+              <Ionicons name="logo-google" size={20} color="#fff" />
+              <Text style={styles.oauthButtonText}>Sign up with Google</Text>
+            </TouchableOpacity>
+
 
             <TouchableOpacity
               style={styles.linkButton}
@@ -539,22 +342,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#2563eb',
   },
-  oauthContainer: {
-    marginTop: 8,
-    gap: 12,
-  },
-  oauthLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
-    textAlign: 'center',
-  },
-  oauthButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
   oauthButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -564,9 +352,6 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     backgroundColor: '#4285F4',
-  },
-  microsoftButton: {
-    backgroundColor: '#00A4EF',
   },
   oauthButtonText: {
     color: '#fff',

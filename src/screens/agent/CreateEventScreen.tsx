@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -40,21 +41,23 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
-  useEffect(() => {
-    loadProperties();
-  }, []);
+  // Reload properties whenever the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadProperties();
+    }, [user?.id])
+  );
 
   const loadProperties = async () => {
     if (!user?.id) return;
-    // Only load properties that don't have active or scheduled open house events
-    const data = await propertyService.getAvailablePropertiesForEvent(user.id);
-    setProperties(data);
-    
-    if (data.length === 0) {
-      Alert.alert(
-        'No Available Properties',
-        'All your properties already have active or scheduled open house events. Complete or cancel existing events first.'
-      );
+
+    try {
+      // Only load properties that don't have active or scheduled open house events
+      const data = await propertyService.getAvailablePropertiesForEvent(user.id);
+      setProperties(data);
+    } catch (error) {
+      console.error('[CreateEventScreen] Error loading properties:', error);
+      Alert.alert('Error', 'Failed to load properties. Please try again.');
     }
   };
 
@@ -99,7 +102,7 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
       }
     } catch (error: any) {
       console.error('[CreateEventScreen] Error:', error);
-      Alert.alert('Error', error.message || 'Failed to create open house');
+      Alert.alert('Error', 'Failed to create open house. Please try again.');
     }
   };
 

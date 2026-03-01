@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { waitlistService } from '../../services/waitlistService';
 import { eventService } from '../../services/eventService';
 import { WaitlistEntry, OpenHouseEvent } from '../../types';
+import { supabase } from '../../config/supabase';
 
 type Props = NativeStackScreenProps<TenantStackParamList, 'WaitlistView'>;
 
@@ -32,7 +33,8 @@ const WaitlistViewScreen: React.FC<Props> = ({ route, navigation }) => {
 
   useEffect(() => {
     loadData();
-    setupRealtimeSubscription();
+    const cleanup = setupRealtimeSubscription();
+    return cleanup;
   }, []);
 
   const loadData = async () => {
@@ -189,9 +191,6 @@ const WaitlistViewScreen: React.FC<Props> = ({ route, navigation }) => {
     </SafeAreaView>
   );
 };
-
-// Import supabase for direct query
-import { supabase } from '../../config/supabase';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },

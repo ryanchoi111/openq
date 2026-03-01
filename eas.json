@@ -12,10 +12,26 @@
       "distribution": "internal"
     },
     "production": {
+<<<<<<< HEAD
       "autoIncrement": true
     }
   },
   "submit": {
     "production": {}
+=======
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal"
+      }
+    }
+>>>>>>> 5168ab903891ea9dea77c178b7372287f84907ad
   }
 }

@@ -97,9 +97,10 @@ const EventDashboardScreen: React.FC<Props> = ({ route, navigation }) => {
             <View style={styles.cardContent}>
               <Text style={styles.position}>#{item.position}</Text>
               <View style={styles.info}>
-                <Text style={styles.name}>{item.guest_name || 'User'}</Text>
-                {item.guest_phone && <Text style={styles.phone}>{item.guest_phone}</Text>}
-                <Text style={styles.phone}>{item.guest_email || 'N/A'}</Text>
+                <Text style={styles.name}>{item.guest_name || item.user?.name || `Guest #${item.position}`}</Text>
+                {(item.guest_email || item.user?.email) && (
+                  <Text style={styles.phone}>{item.guest_email || item.user?.email}</Text>
+                )}
                 <Text style={[styles.status, { color: getStatusColor(item.status) }]}>
                   {item.status}
                 </Text>

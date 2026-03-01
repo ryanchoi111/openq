@@ -6,16 +6,17 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { waitlistService } from '../../services/waitlistService';
 import { applicationService } from '../../services/applicationService';
 import { WaitlistEntry } from '../../types';
+import { Alert } from '../../utils/alert';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'SelectTenants'>;
 
@@ -37,8 +38,6 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
       const data = await waitlistService.getWaitlist(eventId);
       setEntries(data || []);
     } catch (error) {
-      console.error('Error loading waitlist entries:', error);
-      // Only show alert for actual errors, not empty waitlists
       if (error instanceof Error && !error.message.includes('No rows')) {
         Alert.alert('Error', 'Failed to load waitlist entries');
       }
@@ -59,7 +58,6 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleSendApplication = async () => {
-    // Check if user is an agent with housing application
     if (!user || user.role === 'guest' || !('housing_application_url' in user) || !user.housing_application_url) {
       Alert.alert(
         'No Application Uploaded',
@@ -67,7 +65,13 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
         [
           {
             text: 'Go to Profile',
-            onPress: () => navigation.navigate('Profile'),
+            onPress: () =>
+              navigation.dispatch(
+                CommonActions.navigate({
+                  name: 'AgentTabs',
+                  params: { screen: 'Profile' },
+                })
+              ),
           },
           {
             text: 'Cancel',
@@ -83,13 +87,8 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
     }
 
-    // Filter entries to get only selected ones with valid emails
     const selectedEntries = entries.filter(entry => selectedIds.has(entry.id));
-    const entriesWithEmails = selectedEntries.filter(entry => {
-      // For authenticated users, we need their email from the user profile
-      // For guests, guest_email is always present (required field)
-      return entry.user_id || entry.guest_email;
-    });
+    const entriesWithEmails = selectedEntries.filter(entry => entry.user_id || entry.guest_email);
 
     if (entriesWithEmails.length === 0) {
       Alert.alert(
@@ -101,7 +100,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
 
     Alert.alert(
       'Send Housing Application',
-      `Send application to ${entriesWithEmails.length} recipient(s)?`,
+      `Send application via email to ${entriesWithEmails.length} recipient(s)?`,
       [
         {
           text: 'Cancel',
@@ -112,11 +111,10 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
           onPress: async () => {
             try {
               setSending(true);
-              // We already validated user has housing_application_url above
-              const applicationUrl = user.role !== 'guest' && 'housing_application_url' in user 
-                ? user.housing_application_url 
+              const applicationUrl = user.role !== 'guest' && 'housing_application_url' in user
+                ? user.housing_application_url
                 : '';
-              
+
               if (!applicationUrl) {
                 throw new Error('No housing application found');
               }
@@ -129,9 +127,10 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                 user.name,
                 user.email
               );
+
               Alert.alert(
                 'Success',
-                `Housing application sent to ${entriesWithEmails.length} recipient(s)!`,
+                `Housing application sent via email to ${entriesWithEmails.length} recipient(s)!`,
                 [
                   {
                     text: 'OK',
@@ -140,8 +139,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                 ]
               );
             } catch (error: any) {
-              console.error('Error sending application:', error);
-              Alert.alert('Error', error.message || 'Failed to send application');
+              Alert.alert('Error', 'Failed to send application. Please try again.');
             } finally {
               setSending(false);
             }
@@ -164,7 +162,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
       <ScrollView style={styles.content}>
         <Text style={styles.title}>Select Recipients</Text>
         <Text style={styles.subtitle}>
-          Choose tenants to send the housing application to
+          Choose tenants to send the housing application via email
         </Text>
 
         {entries.length === 0 ? (
@@ -189,28 +187,25 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
                     <Text style={styles.positionBadge}>#{entry.position}</Text>
                     <View style={styles.cardInfo}>
                       <Text style={styles.cardName}>
-                        {entry.guest_name || entry.user_id || 'Unknown'}
+                        {entry.guest_name || entry.user?.name || `Guest #${entry.position}`}
                       </Text>
-                      {entry.guest_phone && (
-                        <Text style={styles.cardDetail}>{entry.guest_phone}</Text>
-                      )}
-                      {entry.guest_email && (
-                        <Text style={styles.cardDetail}>{entry.guest_email}</Text>
+                      {(entry.guest_email || entry.user?.email) && (
+                        <Text style={styles.cardDetail}>{entry.guest_email || entry.user?.email}</Text>
                       )}
                     </View>
                   </View>
-                  {isSelected && (
-                    <View style={styles.checkmark}>
-                      <Ionicons name="checkmark-circle" size={32} color="#2563eb" />
-                    </View>
-                  )}
-                  {entry.expressed_interest && (
-                    <View style={styles.interestedBadge}>
-                      <Ionicons name="star" size={18} color="#fbbf24" />
-                      <Text style={styles.interestedText}>Interested</Text>
-                    </View>
-                  )}
                 </View>
+                {isSelected && (
+                  <View style={styles.checkmark}>
+                    <Ionicons name="checkmark-circle" size={20} color="#2563eb" />
+                  </View>
+                )}
+                {entry.expressed_interest && (
+                  <View style={styles.interestedBadge}>
+                    <Ionicons name="star" size={14} color="#fbbf24" />
+                    <Text style={styles.interestedText}>Interested</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })
@@ -230,7 +225,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
             {sending ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.sendButtonText}>Send Housing Application</Text>
+              <Text style={styles.sendButtonText}>Send Application via Email</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -333,20 +328,20 @@ const styles = StyleSheet.create({
   },
   checkmark: {
     position: 'absolute',
-    top: 8,
+    bottom: 42,
     right: 8,
   },
   interestedBadge: {
     position: 'absolute',
-    top: 47,
+    bottom: 12,
     right: 8,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fef3c7',
-    paddingHorizontal: 10,
-    paddingVertical: 0,
-    borderRadius: 12,
-    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 4,
   },
   interestedText: {
     fontSize: 11,

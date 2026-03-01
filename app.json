@@ -1,12 +1,13 @@
 {
   "expo": {
-    "name": "openq",
+    "name": "OpenQ",
     "slug": "openq",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "openq",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -14,10 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.openq",
+      "bundleIdentifier": "com.openqapp.openq",
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs access to your camera to scan QR codes for open house events.",
+<<<<<<< HEAD
         "ITSAppUsesNonExemptEncryption": false
+=======
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select a profile picture."
+>>>>>>> 5168ab903891ea9dea77c178b7372287f84907ad
       }
     },
     "android": {
@@ -31,12 +36,13 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.openq"
+      "package": "com.openqapp.openq"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+<<<<<<< HEAD
       "expo-camera"
     ],
     "extra": {
@@ -44,5 +50,20 @@
         "projectId": "e4c2091c-a0fb-4939-9b27-68dcfa41c7e1"
       }
     }
+=======
+      ["expo-camera", { "cameraPermission": "This app needs camera access to scan QR codes.", "recordAudioAndroid": false }],
+      "expo-font"
+    ],
+    "updates": {
+      "enabled": false,
+      "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2f8daf62-e547-43c1-8b7d-e93c4d38a2a2"
+      }
+    },
+    "owner": "openq-app"
+>>>>>>> 5168ab903891ea9dea77c178b7372287f84907ad
   }
 }

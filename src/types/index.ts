@@ -9,7 +9,6 @@ export type UserRole = 'agent' | 'tenant' | 'guest';
 export interface User {
   id: string;
   email?: string;
-  phone?: string;
   name: string;
   role: UserRole;
   profile_picture?: string;
@@ -20,7 +19,6 @@ export interface User {
 export interface GuestUser {
   id: string;
   name: string;
-  phone: string;
   email: string;
   role: 'guest';
 }
@@ -63,7 +61,6 @@ export interface WaitlistEntry {
   event_id: string;
   user_id?: string; // Null for guests
   guest_name?: string;
-  guest_phone?: string;
   guest_email?: string; // Required for guests, populated when user_id is null
   position: number;
   status: 'waiting' | 'touring' | 'completed' | 'skipped' | 'no-show';
@@ -74,6 +71,10 @@ export interface WaitlistEntry {
   expressed_interest: boolean;
   application_sent: boolean;
   notes?: string;
+  user?: {
+    name: string;
+    email?: string;
+  };
 }
 
 // Application types
@@ -83,7 +84,6 @@ export interface Application {
   waitlist_entry_id: string;
   property_id: string;
   recipient_email?: string;
-  recipient_phone?: string;
   sent_at: string;
   status: 'sent' | 'viewed' | 'submitted';
   application_url?: string;

@@ -30,10 +30,10 @@ const ScanQRScreen: React.FC<Props> = ({ navigation }) => {
   const handleBarCodeScanned = async ({ type, data }: any) => {
     setScanned(true);
 
-    // Parse QR code data: openhouse://join/{eventId}
-    const match = data.match(/openhouse:\/\/join\/(.+)/);
+    // Parse QR code data: openq://join/{eventId}
+    const match = data.match(/openq:\/\/join\/(.+)/);
     if (!match) {
-      Alert.alert('Invalid QR Code', 'This does not appear to be an OpenHouse QR code.');
+      Alert.alert('Invalid QR Code', 'This does not appear to be an OpenQ QR code.');
       setTimeout(() => setScanned(false), 2000);
       return;
     }
@@ -87,7 +87,7 @@ const ScanQRScreen: React.FC<Props> = ({ navigation }) => {
       // Navigate to waitlist view
       navigation.replace('WaitlistView', { eventId, entryId: entry.id });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to join waitlist');
+      Alert.alert('Error', 'Failed to join waitlist. Please try again.');
       setTimeout(() => setScanned(false), 2000);
     }
   };
