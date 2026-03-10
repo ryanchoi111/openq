@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { SignOutButton } from '../../components/SignOutButton';
 import { profileService } from '../../services/profileService';
+import { getGmailConnectionStatus, getZillowTourRequests, connectGmailAccount, setupGmailWatch } from '../../services/gmailService';
+import type { ZillowTourRequest } from '../../types/gmail';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Profile'>;
 
@@ -25,6 +27,67 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, refreshUserProfile, deleteAccount } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [uploadingApplication, setUploadingApplication] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [tourRequests, setTourRequests] = useState<ZillowTourRequest[]>([]);
+  const [loadingTours, setLoadingTours] = useState(false);
+  const [connectingGmail, setConnectingGmail] = useState(false);
+
+  const loadZillowData = useCallback(async () => {
+    if (!user || user.role !== 'agent') return;
+    setLoadingTours(true);
+    try {
+      const connection = await getGmailConnectionStatus(user.id);
+      setGmailConnected(!!connection && !connection.needsReauth);
+      if (connection && !connection.needsReauth) {
+        const tours = await getZillowTourRequests(user.id);
+        setTourRequests(tours);
+      }
+    } catch (err) {
+      console.error('Error loading Zillow data:', err);
+    } finally {
+      setLoadingTours(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadZillowData();
+  }, [loadZillowData]);
+
+  const handleConnectGmail = async () => {
+    if (!user) return;
+    setConnectingGmail(true);
+    try {
+      const result = await connectGmailAccount(user.id);
+      if (result.success) {
+        Alert.alert('Success', 'Gmail connected');
+        await loadZillowData();
+      } else {
+        Alert.alert('Error', result.error || 'Failed to connect Gmail');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to connect Gmail');
+    } finally {
+      setConnectingGmail(false);
+    }
+  };
+
+  const handleReconnectGmail = async () => {
+    if (!user) return;
+    setConnectingGmail(true);
+    try {
+      const result = await setupGmailWatch(user.id);
+      if (result.success) {
+        Alert.alert('Success', 'Gmail watch renewed');
+        await loadZillowData();
+      } else {
+        Alert.alert('Error', result.error || 'Failed to renew Gmail watch');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to renew Gmail watch');
+    } finally {
+      setConnectingGmail(false);
+    }
+  };
 
   const handleEditProfilePicture = () => {
     Alert.alert(
@@ -309,6 +372,78 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
+        {/* Zillow Tour Requests Section (agents only) */}
+        {user.role === 'agent' && (
+          <View style={styles.zillowSection}>
+            <Text style={styles.sectionTitle}>Zillow Tour Requests</Text>
+            {!gmailConnected ? (
+              <TouchableOpacity
+                style={styles.connectGmailButton}
+                onPress={handleConnectGmail}
+                disabled={connectingGmail}
+              >
+                {connectingGmail ? (
+                  <ActivityIndicator size="small" color="#2563eb" />
+                ) : (
+                  <>
+                    <Ionicons name="mail" size={20} color="#2563eb" />
+                    <Text style={styles.connectGmailText}>Connect Gmail</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.reconnectGmailButton}
+                  onPress={handleReconnectGmail}
+                  disabled={connectingGmail}
+                >
+                  {connectingGmail ? (
+                    <ActivityIndicator size="small" color="#64748b" />
+                  ) : (
+                    <>
+                      <Ionicons name="refresh" size={16} color="#64748b" />
+                      <Text style={styles.reconnectGmailText}>Reconnect Gmail</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                {loadingTours ? (
+                  <ActivityIndicator size="small" color="#2563eb" style={{ marginVertical: 16 }} />
+                ) : tourRequests.length === 0 ? (
+                  <View style={styles.emptyTours}>
+                    <Ionicons name="mail-unread-outline" size={32} color="#94a3b8" />
+                    <Text style={styles.emptyToursText}>No Zillow tour requests yet</Text>
+                    <Text style={styles.emptyToursSubtext}>
+                      Emails from Zillow will appear here automatically
+                    </Text>
+                  </View>
+                ) : (
+                  tourRequests.map((tour) => (
+                    <View key={tour.gmailMessageId} style={styles.tourCard}>
+                      <View style={styles.tourHeader}>
+                        <Ionicons name="home-outline" size={18} color="#2563eb" />
+                        <Text style={styles.tourAddress} numberOfLines={2}>
+                          {tour.propertyAddress}
+                        </Text>
+                      </View>
+                      <View style={styles.tourDetails}>
+                        <Text style={styles.tourClient}>{tour.clientName}</Text>
+                        <Text style={styles.tourEmail}>{tour.clientEmail}</Text>
+                        {tour.clientPhone && (
+                          <Text style={styles.tourPhone}>{tour.clientPhone}</Text>
+                        )}
+                      </View>
+                      <Text style={styles.tourDate}>
+                        {new Date(tour.receivedAt).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* Sign Out Button */}
         <SignOutButton
           style={styles.signOutButton}
@@ -514,6 +649,99 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#dc2626',
+  },
+  zillowSection: {
+    marginBottom: 32,
+  },
+  connectGmailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2563eb',
+  },
+  connectGmailText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
+  reconnectGmailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  reconnectGmailText: {
+    fontSize: 14,
+    color: '#64748b',
+  },
+  emptyTours: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  emptyToursText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748b',
+    marginTop: 8,
+  },
+  emptyToursSubtext: {
+    fontSize: 14,
+    color: '#94a3b8',
+    marginTop: 4,
+  },
+  tourCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 16,
+    marginBottom: 10,
+  },
+  tourHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  tourAddress: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  tourDetails: {
+    marginBottom: 8,
+  },
+  tourClient: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#334155',
+  },
+  tourEmail: {
+    fontSize: 14,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  tourPhone: {
+    fontSize: 14,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  tourDate: {
+    fontSize: 13,
+    color: '#94a3b8',
   },
 });
 

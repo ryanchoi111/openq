@@ -10,6 +10,7 @@ import { randomUUID } from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { supabase } from '../config/supabase';
+import { setupGmailWatch } from '../services/gmailService';
 import { User, GuestUser, UserRole } from '../types';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -163,6 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const hashParams = new URLSearchParams(url.hash.substring(1));
       const access_token = url.searchParams.get('access_token') || hashParams.get('access_token');
       const refresh_token = url.searchParams.get('refresh_token') || hashParams.get('refresh_token');
+      const provider_refresh_token = url.searchParams.get('provider_refresh_token') || hashParams.get('provider_refresh_token');
 
       if (!access_token || !refresh_token) {
         throw new Error('No tokens found in OAuth response');
@@ -208,6 +210,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await SecureStore.deleteItemAsync('openhouse_oauth_role');
           setUser(userData as User);
           await SecureStore.deleteItemAsync(GUEST_USER_KEY);
+
+          // Auto-connect Gmail for agents if Google refresh token available
+          const effectiveRole = userData.role;
+          if (effectiveRole === 'agent' && provider_refresh_token && userData.email) {
+            try {
+              await supabase.from('agent_gmail_connections').upsert(
+                {
+                  agent_id: userData.id,
+                  email: userData.email,
+                  refresh_token: provider_refresh_token,
+                  needs_reauth: false,
+                },
+                { onConflict: 'agent_id' }
+              );
+              await setupGmailWatch(userData.id);
+              console.log('[Auth] Gmail connected for agent');
+            } catch (gmailErr) {
+              console.error('[Auth] Gmail setup error (non-fatal):', gmailErr);
+            }
+          }
         }
       }
     } catch (error) {

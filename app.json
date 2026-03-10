@@ -7,7 +7,10 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "openq",
+    "scheme": [
+      "openq",
+      "com.googleusercontent.apps.736200593752-hgdr13cnbu30m2irh15j9vu3aqhau55f"
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",

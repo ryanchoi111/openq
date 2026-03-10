@@ -2,6 +2,8 @@
  * Core type definitions for OpenHouse app
  */
 
+export * from './gmail';
+
 // User roles
 export type UserRole = 'agent' | 'tenant' | 'guest';
 
