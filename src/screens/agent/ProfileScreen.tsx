@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   Image,
@@ -19,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { SignOutButton } from '../../components/SignOutButton';
 import { profileService } from '../../services/profileService';
 import { getGmailConnectionStatus, getZillowTourRequests, connectGmailAccount, setupGmailWatch } from '../../services/gmailService';
+import { supabase } from '../../config/supabase';
 import type { ZillowTourRequest } from '../../types/gmail';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Profile'>;
@@ -31,6 +33,26 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [tourRequests, setTourRequests] = useState<ZillowTourRequest[]>([]);
   const [loadingTours, setLoadingTours] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
+  const [calLink, setCalLink] = useState((user && 'cal_link' in user ? user.cal_link : '') || '');
+  const [savingCalLink, setSavingCalLink] = useState(false);
+
+  const handleSaveCalLink = async () => {
+    if (!user) return;
+    setSavingCalLink(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ cal_link: calLink.trim() || null })
+        .eq('id', user.id);
+      if (error) throw error;
+      await refreshUserProfile();
+      Alert.alert('Saved', 'Cal.com link updated');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to save cal.com link');
+    } finally {
+      setSavingCalLink(false);
+    }
+  };
 
   const loadZillowData = useCallback(async () => {
     if (!user || user.role !== 'agent') return;
@@ -372,6 +394,35 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
+        {/* Cal.com Link Section (agents only) */}
+        {user.role === 'agent' && (
+          <View style={styles.calLinkSection}>
+            <Text style={styles.sectionTitle}>Scheduling Link</Text>
+            <View style={styles.calLinkRow}>
+              <TextInput
+                style={styles.calLinkInput}
+                value={calLink}
+                onChangeText={setCalLink}
+                placeholder="https://cal.com/your-link"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+              <TouchableOpacity
+                style={styles.calLinkSaveButton}
+                onPress={handleSaveCalLink}
+                disabled={savingCalLink}
+              >
+                {savingCalLink ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.calLinkSaveText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Zillow Tour Requests Section (agents only) */}
         {user.role === 'agent' && (
           <View style={styles.zillowSection}>
@@ -419,12 +470,17 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                 ) : (
                   tourRequests.map((tour) => (
-                    <View key={tour.gmailMessageId} style={styles.tourCard}>
+                    <TouchableOpacity
+                      key={tour.gmailMessageId}
+                      style={styles.tourCard}
+                      onPress={() => navigation.navigate('TourRequestDetail', { tourRequest: tour })}
+                    >
                       <View style={styles.tourHeader}>
                         <Ionicons name="home-outline" size={18} color="#2563eb" />
                         <Text style={styles.tourAddress} numberOfLines={2}>
                           {tour.propertyAddress}
                         </Text>
+                        <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
                       </View>
                       <View style={styles.tourDetails}>
                         <Text style={styles.tourClient}>{tour.clientName}</Text>
@@ -436,7 +492,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                       <Text style={styles.tourDate}>
                         {new Date(tour.receivedAt).toLocaleDateString()}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   ))
                 )}
               </>
@@ -649,6 +705,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#dc2626',
+  },
+  calLinkSection: {
+    marginBottom: 32,
+  },
+  calLinkRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  calLinkInput: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#1e293b',
+  },
+  calLinkSaveButton: {
+    backgroundColor: '#2563eb',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  calLinkSaveText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 15,
   },
   zillowSection: {
     marginBottom: 32,

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   role TEXT NOT NULL CHECK (role IN ('agent', 'tenant')),
   profile_picture TEXT,
   housing_application_url TEXT, -- For agents: URL to uploaded housing application PDF
+  cal_link TEXT, -- For agents: cal.com scheduling link
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -90,6 +91,37 @@ CREATE TABLE IF NOT EXISTS public.applications (
   application_url TEXT
 );
 
+-- Agent Gmail connections (OAuth tokens and watch state)
+CREATE TABLE IF NOT EXISTS public.agent_gmail_connections (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agent_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  oauth_client_id TEXT,
+  history_id TEXT,
+  watch_expiration TIMESTAMPTZ,
+  needs_reauth BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT agent_gmail_connections_agent_id_key UNIQUE (agent_id)
+);
+
+-- Zillow tour requests parsed from Gmail
+CREATE TABLE IF NOT EXISTS public.zillow_tour_requests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agent_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  gmail_message_id TEXT NOT NULL,
+  client_name TEXT NOT NULL,
+  client_email TEXT,
+  client_phone TEXT,
+  property_address TEXT,
+  raw_subject TEXT,
+  received_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT zillow_tour_requests_gmail_message_id_key UNIQUE (gmail_message_id),
+  CONSTRAINT zillow_tour_requests_unique_lead UNIQUE (agent_id, client_email, property_address)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_properties_agent_id ON public.properties(agent_id);
 CREATE INDEX IF NOT EXISTS idx_events_property_id ON public.open_house_events(property_id);
@@ -104,12 +136,19 @@ CREATE INDEX IF NOT EXISTS idx_waitlist_position ON public.waitlist_entries(even
 CREATE UNIQUE INDEX IF NOT EXISTS idx_waitlist_unique_position 
   ON public.waitlist_entries(event_id, position);
 
+-- Gmail indexes
+CREATE INDEX IF NOT EXISTS idx_gmail_connections_agent_id ON public.agent_gmail_connections(agent_id);
+CREATE INDEX IF NOT EXISTS idx_gmail_connections_email ON public.agent_gmail_connections(email);
+CREATE INDEX IF NOT EXISTS idx_zillow_tours_agent_id ON public.zillow_tour_requests(agent_id);
+
 -- Enable Row Level Security
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.open_house_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.waitlist_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_gmail_connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.zillow_tour_requests ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 
@@ -194,6 +233,23 @@ CREATE POLICY "Agents can create applications for their events" ON public.applic
       WHERE id = event_id AND agent_id = auth.uid()
     )
   );
+
+-- Gmail connections: agents can read/write own connections
+CREATE POLICY "Agents can read own gmail connections" ON public.agent_gmail_connections
+  FOR SELECT USING (auth.uid() = agent_id);
+
+CREATE POLICY "Agents can insert own gmail connections" ON public.agent_gmail_connections
+  FOR INSERT WITH CHECK (auth.uid() = agent_id);
+
+CREATE POLICY "Agents can update own gmail connections" ON public.agent_gmail_connections
+  FOR UPDATE USING (auth.uid() = agent_id);
+
+CREATE POLICY "Agents can delete own gmail connections" ON public.agent_gmail_connections
+  FOR DELETE USING (auth.uid() = agent_id);
+
+-- Zillow tour requests: agents can read own requests
+CREATE POLICY "Agents can read own zillow requests" ON public.zillow_tour_requests
+  FOR SELECT USING (auth.uid() = agent_id);
 
 -- Enable Realtime for waitlist updates
 ALTER PUBLICATION supabase_realtime ADD TABLE public.waitlist_entries;

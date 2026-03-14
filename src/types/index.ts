@@ -15,6 +15,7 @@ export interface User {
   role: UserRole;
   profile_picture?: string;
   housing_application_url?: string;
+  cal_link?: string;
   created_at: string;
 }
 
