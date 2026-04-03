@@ -11,6 +11,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
+import { colors, typography } from '../utils/theme';
 import { 
   RootStackParamList, 
   TenantStackParamList, 
@@ -93,29 +94,28 @@ const AgentTabNavigator = () => {
   return (
     <AgentTabs.Navigator
       screenOptions={{
-        tabBarActiveTintColor: '#2563eb',
-        tabBarInactiveTintColor: '#64748b',
-        tabBarShowLabel: false,
+        tabBarActiveTintColor: colors.navy900,
+        tabBarInactiveTintColor: colors.ink400,
+        tabBarShowLabel: true,
         tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopWidth: 1,
-          borderTopColor: '#e2e8f0',
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
+          backgroundColor: colors.white,
+          borderTopWidth: 0.5,
+          borderTopColor: colors.ink200,
+          height: 49,
+          paddingTop: 4,
         },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        tabBarLabelStyle: {
+          fontSize: typography.tabLabel.fontSize,
+          fontWeight: typography.tabLabel.fontWeight,
+        },
         headerStyle: {
-          backgroundColor: '#fff',
-          borderBottomWidth: 1,
-          borderBottomColor: '#e2e8f0',
-          elevation: 0,
-          shadowOpacity: 0,
+          backgroundColor: colors.white,
         },
+        headerShadowVisible: false,
         headerTitleStyle: {
-          fontWeight: '700',
-          fontSize: 24,
-          color: '#1e293b',
+          fontWeight: typography.heading.fontWeight,
+          fontSize: typography.heading.fontSize,
+          color: colors.ink900,
         },
         headerTitleAlign: 'left',
         headerLeftContainerStyle: {
@@ -131,8 +131,9 @@ const AgentTabNavigator = () => {
         component={AgentHomeScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
+          tabBarLabel: 'Tours',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -141,18 +142,9 @@ const AgentTabNavigator = () => {
         component={PropertiesScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="business" size={size} color={color} />
-          ),
-        }}
-      />
-      <AgentTabs.Screen
-        name="CreateEvent"
-        component={CreateEventScreen as any}
-        options={{
-          headerTitle: 'OpenQ',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle" size={size} color={color} />
+          tabBarLabel: 'Listings',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -161,8 +153,9 @@ const AgentTabNavigator = () => {
         component={EventHistoryScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time" size={size} color={color} />
+          tabBarLabel: 'PPL',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'people' : 'people-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -171,8 +164,9 @@ const AgentTabNavigator = () => {
         component={ProfileScreen as any}
         options={{
           headerTitle: 'OpenQ',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-circle" size={size} color={color} />
+          tabBarLabel: 'Me',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -186,13 +180,17 @@ const AgentNavigator = () => {
     <AgentStack.Navigator
       screenOptions={{
         headerStyle: {
-          backgroundColor: '#fff',
+          backgroundColor: colors.white,
         },
+        headerShadowVisible: false,
+        headerTintColor: colors.navy900,
         headerTitleStyle: {
-          fontWeight: '600',
+          fontWeight: typography.subheading.fontWeight,
+          fontSize: typography.subheading.fontSize,
+          color: colors.ink900,
         },
         contentStyle: {
-          backgroundColor: '#f8fafc',
+          backgroundColor: colors.white,
         },
       }}
     >
@@ -200,6 +198,11 @@ const AgentNavigator = () => {
         name="AgentTabs"
         component={AgentTabNavigator}
         options={{ headerShown: false }}
+      />
+      <AgentStack.Screen
+        name="CreateEvent"
+        component={CreateEventScreen}
+        options={{ title: 'New Tour' }}
       />
       <AgentStack.Screen
         name="CreateProperty"

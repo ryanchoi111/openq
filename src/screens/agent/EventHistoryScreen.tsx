@@ -6,6 +6,7 @@ import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { eventService } from '../../services/eventService';
 import { OpenHouseEvent } from '../../types';
+import { colors, typography, spacing, radii } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'EventHistory'>;
 
@@ -38,7 +39,7 @@ const EventHistoryScreen: React.FC<Props> = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.navy900} />
       </View>
     );
   }
@@ -58,7 +59,9 @@ const EventHistoryScreen: React.FC<Props> = ({ navigation }) => {
       <Text style={styles.eventTime}>
         {new Date(item.start_time).toLocaleString()} - {new Date(item.end_time).toLocaleString()}
       </Text>
-      <Text style={styles.status}>Completed</Text>
+      <View style={styles.statusBadge}>
+        <Text style={styles.statusText}>Ended</Text>
+      </View>
     </TouchableOpacity>
   );
 
@@ -83,46 +86,48 @@ const EventHistoryScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1, backgroundColor: colors.white },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.white,
   },
-  list: { padding: 20 },
+  list: { padding: spacing.xl },
   card: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: colors.white,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.ink200,
   },
   property: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
+    ...typography.subheading,
+    color: colors.ink900,
+    marginBottom: spacing.xs,
   },
   details: {
-    fontSize: 14,
-    color: '#64748b',
-    marginBottom: 8,
+    ...typography.caption,
+    color: colors.ink600,
+    marginBottom: spacing.sm,
   },
   eventTime: {
-    fontSize: 14,
-    color: '#64748b',
-    marginBottom: 4,
+    ...typography.caption,
+    color: colors.ink600,
+    marginBottom: spacing.sm,
   },
-  status: {
+  statusBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.ink50,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
+  },
+  statusText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#10b981',
-    textTransform: 'uppercase',
+    fontWeight: '500',
+    color: colors.ink400,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -130,16 +135,14 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#64748b',
-    marginBottom: 8,
+    ...typography.heading,
+    color: colors.ink900,
+    marginBottom: spacing.sm,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#94a3b8',
+    ...typography.caption,
+    color: colors.ink400,
   },
 });
 
 export default EventHistoryScreen;
-

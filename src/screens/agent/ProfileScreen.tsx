@@ -22,6 +22,7 @@ import { profileService } from '../../services/profileService';
 import { getGmailConnectionStatus, getZillowTourRequests, connectGmailAccount, setupGmailWatch } from '../../services/gmailService';
 import { supabase } from '../../config/supabase';
 import type { ZillowTourRequest } from '../../types/gmail';
+import { colors, typography, spacing, radii, getAvatarColor, getInitials } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Profile'>;
 
@@ -184,10 +185,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setUploading(true);
       const updatedUser = await profileService.updateProfilePicture(user.id, imageUri);
-      
+
       // Refresh the user profile to update the UI with new profile picture
       await refreshUserProfile();
-      
+
       Alert.alert('Success', 'Profile picture updated successfully!');
     } catch (error: any) {
       console.error('Error uploading profile picture:', error);
@@ -208,7 +209,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const document = result.assets[0];
-        
+
         // Validate file size (max 10MB)
         if (document.size && document.size > 10 * 1024 * 1024) {
           Alert.alert('File Too Large', 'Please select a PDF file smaller than 10MB');
@@ -217,10 +218,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
         setUploadingApplication(true);
         await profileService.updateHousingApplication(user.id, document.uri);
-        
+
         // Refresh the user profile
         await refreshUserProfile();
-        
+
         Alert.alert('Success', 'Housing application uploaded successfully!');
       }
     } catch (error: any) {
@@ -267,6 +268,9 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     );
   }
 
+  const avatarColor = getAvatarColor(user.name || 'U');
+  const initials = getInitials(user.name || 'U');
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -279,13 +283,13 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                 style={styles.avatar}
               />
             ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={60} color="#94a3b8" />
+              <View style={[styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
+                <Text style={styles.avatarInitials}>{initials}</Text>
               </View>
             )}
             {uploading && (
               <View style={styles.uploadingOverlay}>
-                <ActivityIndicator size="large" color="#2563eb" />
+                <ActivityIndicator size="large" color={colors.navy900} />
               </View>
             )}
           </View>
@@ -295,7 +299,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             onPress={handleEditProfilePicture}
             disabled={uploading}
           >
-            <Ionicons name="camera" size={20} color="#2563eb" />
+            <Ionicons name="camera" size={20} color={colors.navy900} />
             <Text style={styles.editButtonText}>Edit Profile Picture</Text>
           </TouchableOpacity>
         </View>
@@ -303,19 +307,19 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         {/* User Information */}
         <View style={styles.infoSection}>
           <View style={styles.infoCard}>
-            <Text style={styles.label}>Name</Text>
+            <Text style={styles.label}>NAME</Text>
             <Text style={styles.value}>{user.name}</Text>
           </View>
 
           {user.email && (
             <View style={styles.infoCard}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>EMAIL</Text>
               <Text style={styles.value}>{user.email}</Text>
             </View>
           )}
 
           <View style={styles.infoCard}>
-            <Text style={styles.label}>Role</Text>
+            <Text style={styles.label}>ROLE</Text>
             <Text style={styles.value}>
               {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
             </Text>
@@ -330,7 +334,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               {user.housing_application_url ? (
                 <>
                   <View style={styles.applicationInfo}>
-                    <Ionicons name="document-text" size={40} color="#2563eb" />
+                    <Ionicons name="document-text" size={40} color={colors.navy400} />
                     <View style={styles.applicationTextContainer}>
                       <Text style={styles.applicationText}>Application uploaded</Text>
                       <Text style={styles.applicationSubtext}>
@@ -344,10 +348,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                     disabled={uploadingApplication}
                   >
                     {uploadingApplication ? (
-                      <ActivityIndicator size="small" color="#2563eb" />
+                      <ActivityIndicator size="small" color={colors.navy900} />
                     ) : (
                       <>
-                        <Ionicons name="cloud-upload" size={20} color="#2563eb" />
+                        <Ionicons name="cloud-upload" size={20} color={colors.navy900} />
                         <Text style={styles.uploadButtonText}>Replace Application</Text>
                       </>
                     )}
@@ -356,7 +360,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               ) : (
                 <>
                   <View style={styles.applicationInfo}>
-                    <Ionicons name="document-text-outline" size={40} color="#94a3b8" />
+                    <Ionicons name="document-text-outline" size={40} color={colors.ink400} />
                     <View style={styles.applicationTextContainer}>
                       <Text style={styles.applicationText}>No application uploaded</Text>
                       <Text style={styles.applicationSubtext}>
@@ -370,10 +374,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                     disabled={uploadingApplication}
                   >
                     {uploadingApplication ? (
-                      <ActivityIndicator size="small" color="#2563eb" />
+                      <ActivityIndicator size="small" color={colors.navy900} />
                     ) : (
                       <>
-                        <Ionicons name="cloud-upload" size={20} color="#2563eb" />
+                        <Ionicons name="cloud-upload" size={20} color={colors.navy900} />
                         <Text style={styles.uploadButtonText}>Upload Application</Text>
                       </>
                     )}
@@ -387,9 +391,9 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               style={styles.emailTemplateButton}
               onPress={() => navigation.navigate('EditEmailTemplate')}
             >
-              <Ionicons name="mail-outline" size={20} color="#2563eb" />
+              <Ionicons name="mail-outline" size={20} color={colors.navy900} />
               <Text style={styles.emailTemplateButtonText}>Edit Email Template</Text>
-              <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+              <Ionicons name="chevron-forward" size={20} color={colors.ink400} />
             </TouchableOpacity>
           </View>
         )}
@@ -400,10 +404,14 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.sectionTitle}>Scheduling Link</Text>
             <View style={styles.calLinkRow}>
               <TextInput
-                style={styles.calLinkInput}
+                style={[
+                  styles.calLinkInput,
+                  calLink.trim() ? styles.calLinkInputFilled : null,
+                ]}
                 value={calLink}
                 onChangeText={setCalLink}
                 placeholder="https://cal.com/your-link"
+                placeholderTextColor={colors.ink400}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
@@ -414,7 +422,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                 disabled={savingCalLink}
               >
                 {savingCalLink ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={colors.white} />
                 ) : (
                   <Text style={styles.calLinkSaveText}>Save</Text>
                 )}
@@ -434,10 +442,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                 disabled={connectingGmail}
               >
                 {connectingGmail ? (
-                  <ActivityIndicator size="small" color="#2563eb" />
+                  <ActivityIndicator size="small" color={colors.navy900} />
                 ) : (
                   <>
-                    <Ionicons name="mail" size={20} color="#2563eb" />
+                    <Ionicons name="mail" size={20} color={colors.navy900} />
                     <Text style={styles.connectGmailText}>Connect Gmail</Text>
                   </>
                 )}
@@ -450,19 +458,19 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                   disabled={connectingGmail}
                 >
                   {connectingGmail ? (
-                    <ActivityIndicator size="small" color="#64748b" />
+                    <ActivityIndicator size="small" color={colors.ink600} />
                   ) : (
                     <>
-                      <Ionicons name="refresh" size={16} color="#64748b" />
+                      <Ionicons name="refresh" size={16} color={colors.ink600} />
                       <Text style={styles.reconnectGmailText}>Reconnect Gmail</Text>
                     </>
                   )}
                 </TouchableOpacity>
                 {loadingTours ? (
-                  <ActivityIndicator size="small" color="#2563eb" style={{ marginVertical: 16 }} />
+                  <ActivityIndicator size="small" color={colors.navy900} style={{ marginVertical: spacing.lg }} />
                 ) : tourRequests.length === 0 ? (
                   <View style={styles.emptyTours}>
-                    <Ionicons name="mail-unread-outline" size={32} color="#94a3b8" />
+                    <Ionicons name="mail-unread-outline" size={32} color={colors.ink400} />
                     <Text style={styles.emptyToursText}>No Zillow tour requests yet</Text>
                     <Text style={styles.emptyToursSubtext}>
                       Emails from Zillow will appear here automatically
@@ -476,11 +484,11 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                       onPress={() => navigation.navigate('TourRequestDetail', { tourRequest: tour })}
                     >
                       <View style={styles.tourHeader}>
-                        <Ionicons name="home-outline" size={18} color="#2563eb" />
+                        <Ionicons name="home-outline" size={18} color={colors.navy900} />
                         <Text style={styles.tourAddress} numberOfLines={2}>
                           {tour.propertyAddress}
                         </Text>
-                        <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+                        <Ionicons name="chevron-forward" size={18} color={colors.ink400} />
                       </View>
                       <View style={styles.tourDetails}>
                         <Text style={styles.tourClient}>{tour.clientName}</Text>
@@ -512,7 +520,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           style={styles.deleteButton}
           onPress={handleDeleteAccount}
         >
-          <Ionicons name="trash-outline" size={20} color="#dc2626" />
+          <Ionicons name="trash-outline" size={20} color={colors.coral500} />
           <Text style={styles.deleteButtonText}>Delete Account</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -523,7 +531,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.white,
   },
   loadingContainer: {
     flex: 1,
@@ -531,34 +539,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
-    fontSize: 16,
-    color: '#64748b',
+    ...typography.body,
+    color: colors.ink600,
   },
   scrollContent: {
-    padding: 20,
+    padding: spacing.xl,
     paddingBottom: 40,
   },
   profileSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: spacing['3xl'],
   },
   avatarContainer: {
     position: 'relative',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   avatar: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#e2e8f0',
+    backgroundColor: colors.ink200,
   },
   avatarPlaceholder: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#e2e8f0',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarInitials: {
+    fontSize: 40,
+    fontWeight: '600',
+    color: colors.white,
   },
   uploadingOverlay: {
     position: 'absolute',
@@ -574,186 +586,177 @@ const styles = StyleSheet.create({
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2563eb',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.navy50,
+    borderRadius: radii.md,
   },
   editButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2563eb',
+    ...typography.subheading,
+    color: colors.navy900,
   },
   infoSection: {
-    gap: 12,
-    marginBottom: 32,
+    gap: spacing.md,
+    marginBottom: spacing['3xl'],
   },
   infoCard: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.ink200,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
-    marginBottom: 4,
+    ...typography.small,
+    color: colors.ink600,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
   },
   value: {
-    fontSize: 16,
-    color: '#1e293b',
+    ...typography.body,
+    color: colors.ink900,
   },
   applicationSection: {
-    marginBottom: 32,
+    marginBottom: spacing['3xl'],
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.ink900,
+    marginBottom: spacing.md,
   },
   applicationCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    padding: spacing.xl,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    gap: 16,
+    borderColor: colors.ink200,
+    gap: spacing.lg,
   },
   applicationInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   applicationTextContainer: {
     flex: 1,
   },
   applicationText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
+    ...typography.subheading,
+    color: colors.ink900,
+    marginBottom: spacing.xs,
   },
   applicationSubtext: {
-    fontSize: 14,
-    color: '#64748b',
+    ...typography.caption,
+    color: colors.ink600,
   },
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: colors.white,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#2563eb',
+    borderColor: colors.navy400,
   },
   uploadButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2563eb',
+    ...typography.subheading,
+    color: colors.navy900,
   },
   emailTemplateButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    gap: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginTop: 16,
+    borderColor: colors.ink200,
+    marginTop: spacing.lg,
   },
   emailTemplateButtonText: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
+    ...typography.subheading,
+    color: colors.ink900,
   },
   signOutButton: {
-    backgroundColor: '#ef4444',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.ink200,
   },
   signOutButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    ...typography.subheading,
+    color: colors.ink900,
   },
   deleteButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#dc2626',
-    backgroundColor: '#fff',
-    marginTop: 16,
+    gap: spacing.sm,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
   },
   deleteButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#dc2626',
+    ...typography.subheading,
+    color: colors.coral500,
   },
   calLinkSection: {
-    marginBottom: 32,
+    marginBottom: spacing['3xl'],
   },
   calLinkRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   calLinkInput: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    backgroundColor: colors.white,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 12,
+    borderColor: colors.ink200,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 15,
-    color: '#1e293b',
+    ...typography.body,
+    color: colors.ink900,
+  },
+  calLinkInputFilled: {
+    backgroundColor: colors.navy50,
   },
   calLinkSaveButton: {
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    backgroundColor: colors.navy900,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
     justifyContent: 'center',
   },
   calLinkSaveText: {
-    color: '#fff',
+    color: colors.white,
     fontWeight: '600',
-    fontSize: 15,
+    ...typography.body,
   },
   zillowSection: {
-    marginBottom: 32,
+    marginBottom: spacing['3xl'],
   },
   connectGmailButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
     paddingVertical: 14,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#2563eb',
+    borderColor: colors.navy400,
   },
   connectGmailText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2563eb',
+    ...typography.subheading,
+    color: colors.navy900,
   },
   reconnectGmailButton: {
     flexDirection: 'row',
@@ -761,74 +764,71 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   reconnectGmailText: {
-    fontSize: 14,
-    color: '#64748b',
+    ...typography.caption,
+    color: colors.ink600,
   },
   emptyTours: {
     alignItems: 'center',
-    paddingVertical: 24,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    paddingVertical: spacing['2xl'],
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.ink200,
   },
   emptyToursText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748b',
-    marginTop: 8,
+    ...typography.subheading,
+    color: colors.ink600,
+    marginTop: spacing.sm,
   },
   emptyToursSubtext: {
-    fontSize: 14,
-    color: '#94a3b8',
-    marginTop: 4,
+    ...typography.caption,
+    color: colors.ink400,
+    marginTop: spacing.xs,
   },
   tourCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 16,
+    borderColor: colors.ink200,
+    padding: spacing.lg,
     marginBottom: 10,
   },
   tourHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   tourAddress: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
+    ...typography.subheading,
+    color: colors.ink900,
   },
   tourDetails: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   tourClient: {
-    fontSize: 15,
+    ...typography.body,
     fontWeight: '500',
-    color: '#334155',
+    color: colors.ink900,
   },
   tourEmail: {
-    fontSize: 14,
-    color: '#64748b',
+    ...typography.caption,
+    color: colors.ink600,
     marginTop: 2,
   },
   tourPhone: {
-    fontSize: 14,
-    color: '#64748b',
+    ...typography.caption,
+    color: colors.ink600,
     marginTop: 2,
   },
   tourDate: {
-    fontSize: 13,
-    color: '#94a3b8',
+    ...typography.caption,
+    color: colors.ink400,
   },
 });
 
 export default ProfileScreen;
-

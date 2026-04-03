@@ -12,11 +12,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { propertyService } from '../../services/propertyService';
 import { eventService } from '../../services/eventService';
 import { Property } from '../../types';
+import { colors, typography, spacing, radii } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'CreateEvent'>;
 
@@ -155,12 +157,13 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
       >
         {properties.length === 0 ? (
           <View style={styles.emptyState}>
+            <Ionicons name="home-outline" size={48} color={colors.ink200} />
             <Text style={styles.emptyStateTitle}>No Available Properties</Text>
             <Text style={styles.emptyStateText}>
               All your properties currently have active or scheduled open house events.
@@ -195,7 +198,7 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Start Date/Time */}
           <View style={styles.dateTimeRow}>
-            <Text style={styles.label}>Start</Text>
+            <Text style={styles.label}>START</Text>
             <View style={styles.dateTimeButtons}>
               <TouchableOpacity
                 style={styles.dateTimeButton}
@@ -226,7 +229,7 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* End Date/Time */}
           <View style={styles.dateTimeRow}>
-            <Text style={styles.label}>End</Text>
+            <Text style={styles.label}>END</Text>
             <View style={styles.dateTimeButtons}>
               <TouchableOpacity
                 style={styles.dateTimeButton}
@@ -307,82 +310,100 @@ const CreateEventScreen: React.FC<Props> = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { padding: 20 },
+  container: { flex: 1, backgroundColor: colors.white },
+  content: { padding: spacing.xl },
   scrollContent: { paddingBottom: 40 },
   emptyState: {
-    backgroundColor: '#fff',
-    padding: 24,
-    borderRadius: 12,
-    marginVertical: 20,
+    paddingVertical: 60,
     alignItems: 'center',
   },
   emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.ink900,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptyStateText: {
-    fontSize: 14,
-    color: '#64748b',
+    ...typography.caption,
+    color: colors.ink400,
     textAlign: 'center',
-    lineHeight: 20,
+    marginTop: spacing.xs,
   },
   propertyCard: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
+    backgroundColor: colors.white,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.ink200,
   },
-  propertyCardSelected: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
-  address: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
-  details: { fontSize: 14, color: '#64748b', marginTop: 4 },
+  propertyCardSelected: {
+    borderColor: colors.navy400,
+    borderWidth: 1.5,
+    backgroundColor: colors.navy50,
+  },
+  address: {
+    ...typography.subheading,
+    color: colors.ink900,
+  },
+  details: {
+    ...typography.caption,
+    color: colors.ink600,
+    marginTop: spacing.xs,
+  },
   dateTimeSection: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
-    marginBottom: 12,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.ink900,
+    marginBottom: spacing.lg,
   },
   dateTimeRow: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
-    marginBottom: 8,
+    ...typography.small,
+    color: colors.ink600,
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
   },
   dateTimeButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   dateTimeButton: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.navy50,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: colors.ink200,
+    borderRadius: radii.md,
+    padding: spacing.md,
     alignItems: 'center',
   },
   dateTimeText: {
     fontSize: 16,
-    color: '#1e293b',
     fontWeight: '500',
+    color: colors.ink900,
   },
-  button: { backgroundColor: '#2563eb', padding: 16, borderRadius: 8, marginTop: 20 },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  button: {
+    backgroundColor: colors.navy900,
+    borderRadius: radii.md,
+    marginTop: spacing.xl,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonDisabled: { opacity: 0.4 },
+  buttonText: {
+    color: colors.white,
+    ...typography.subheading,
+    textAlign: 'center',
+  },
 });
 
 export default CreateEventScreen;

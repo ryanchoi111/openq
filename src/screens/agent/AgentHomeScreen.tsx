@@ -8,23 +8,56 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Animated,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { eventService } from '../../services/eventService';
 import { OpenHouseEvent } from '../../types';
+import { colors, typography, spacing, radii, badgeStyles } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'AgentHome'>;
 
+/** Format today's date as "Today, March 13" */
+function formatTodayDate(): string {
+  const now = new Date();
+  const month = now.toLocaleString('en-US', { month: 'long' });
+  const day = now.getDate();
+  return `Today, ${month} ${day}`;
+}
+
+/** Format event time range as compact string */
+function formatTimeRange(start: string, end: string): string {
+  const fmt = (d: string) =>
+    new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+
+/** Build property details line: beds/bath + price */
+function formatPropertyDetails(event: OpenHouseEvent): string {
+  const p = event.property;
+  if (!p) return '';
+  const parts: string[] = [];
+  if (p.bedrooms) parts.push(`${p.bedrooms} bed`);
+  if (p.bathrooms) parts.push(`${p.bathrooms} bath`);
+  if (p.rent) parts.push(`$${p.rent.toLocaleString()}/mo`);
+  return parts.join(' · ');
+}
+
 const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
+  const parentNav = useNavigation<NativeStackNavigationProp<AgentStackParamList>>();
   const { user } = useAuth();
   const [scheduledEvents, setScheduledEvents] = useState<OpenHouseEvent[]>([]);
   const [activeEvents, setActiveEvents] = useState<OpenHouseEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const fabScale = React.useRef(new Animated.Value(1)).current;
 
   // Reload all events whenever screen comes into focus
   useFocusEffect(
@@ -82,7 +115,6 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
             try {
               await eventService.deleteEvent(eventId);
               Alert.alert('Success', 'Open house deleted successfully');
-              // Reload the events list
               loadAllEvents();
             } catch (error: any) {
               console.error('Error deleting event:', error);
@@ -94,209 +126,315 @@ const AgentHomeScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
+  const allEvents = [...activeEvents, ...scheduledEvents];
+
+  // ---------- FAB press handlers ----------
+  const onFabPressIn = () => {
+    Animated.spring(fabScale, {
+      toValue: 0.93,
+      useNativeDriver: true,
+    }).start();
+  };
+  const onFabPressOut = () => {
+    Animated.spring(fabScale, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // ---------- Loading state ----------
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.navy700} />
       </View>
     );
   }
 
+  // ---------- Empty state ----------
+  if (allEvents.length === 0) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="calendar-outline" size={48} color={colors.ink200} />
+          <Text style={styles.emptyHeading}>No tours scheduled</Text>
+          <Text style={styles.emptyBody}>
+            Create your first open house tour to get started
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            activeOpacity={0.85}
+            onPress={() => parentNav.navigate('CreateEvent', {})}
+          >
+            <Text style={styles.primaryButtonText}>Create Tour</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ---------- Main dashboard ----------
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <ScrollView
-        style={styles.content}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Scheduled Open Houses Section */}
-        {scheduledEvents.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>
-              Scheduled Open Houses ({scheduledEvents.length})
-            </Text>
-            {scheduledEvents.map((event) => (
-              <View key={event.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitle}>Scheduled Open House</Text>
-                    <Text style={styles.property}>
-                      {event.property?.address}
-                      {event.property?.address2 ? ` ${event.property.address2}` : ''}
-                    </Text>
-                    <Text style={styles.eventTime}>
-                      {new Date(event.start_time).toLocaleString()} - 
-                      {new Date(event.end_time).toLocaleString()}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteEvent(
-                      event.id,
-                      `${event.property?.address}${event.property?.address2 ? ` ${event.property.address2}` : ''}`
-                    )}
-                  >
-                    <Text style={styles.deleteButtonText}>🗑️</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </>
-        )}
+        {/* Date subheading */}
+        <Text style={styles.dateLabel}>{formatTodayDate()}</Text>
 
-        {/* Active Open Houses Section */}
-        {activeEvents.length > 0 ? (
-          <>
-            <Text style={styles.sectionTitle}>
-              Active Open Houses ({activeEvents.length})
-            </Text>
-            {activeEvents.map((event) => (
-              <View key={event.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitle}>Active Open House</Text>
-                    <Text style={styles.property}>
-                      {event.property?.address}
-                      {event.property?.address2 ? ` ${event.property.address2}` : ''}
-                    </Text>
-                    <Text style={styles.eventTime}>
-                      {new Date(event.start_time).toLocaleString()} - 
-                      {new Date(event.end_time).toLocaleString()}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteEvent(
-                      event.id,
-                      `${event.property?.address}${event.property?.address2 ? ` ${event.property.address2}` : ''}`
-                    )}
-                  >
-                    <Text style={styles.deleteButtonText}>🗑️</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={styles.buttonHalf}
-                    onPress={() =>
-                      navigation.navigate('EventDashboard', { eventId: event.id })
-                    }
-                  >
-                    <Text style={styles.buttonText}>Manage Queue</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.buttonHalf}
-                    onPress={() =>
-                      navigation.navigate('SelectTenants', { eventId: event.id })
-                    }
-                  >
-                    <Text style={styles.buttonText}>Send Application</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </>
-        ) : scheduledEvents.length === 0 ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>No Active Open Houses</Text>
-            <Text style={styles.cardSubtext}>Add a property and create an open house to get started</Text>
+        {/* Metric cards */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.metricsRow}
+          contentContainerStyle={styles.metricsContent}
+        >
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Scheduled</Text>
+            <Text style={styles.metricValue}>{allEvents.length}</Text>
           </View>
-        ) : null}
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Attendees</Text>
+            <Text style={styles.metricValue}>0</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Want to apply</Text>
+            <Text style={[styles.metricValue, { color: colors.green500 }]}>0</Text>
+          </View>
+        </ScrollView>
 
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Properties')}
-          >
-            <Text style={styles.actionButtonText}>My Properties</Text>
-          </TouchableOpacity>
+        {/* Tour cards */}
+        {allEvents.map((event) => {
+          const isActive = event.status === 'active';
+          const address = `${event.property?.address ?? ''}${event.property?.address2 ? ` ${event.property.address2}` : ''}`;
+          const badge = isActive ? badgeStyles['live-now'] : badgeStyles['upcoming'];
+          const badgeLabel = isActive ? 'Live now' : 'Upcoming';
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('CreateEvent', {})}
-          >
-            <Text style={styles.actionButtonText}>Create Open House</Text>
-          </TouchableOpacity>
+          return (
+            <Pressable
+              key={event.id}
+              style={({ pressed }) => [
+                styles.tourCard,
+                pressed && { backgroundColor: colors.ink50 },
+              ]}
+              onPress={() =>
+                parentNav.navigate('EventDashboard', { eventId: event.id })
+              }
+            >
+              {/* Top row: address + badge */}
+              <View style={styles.tourTopRow}>
+                <Text style={styles.tourAddress} numberOfLines={1}>
+                  {address}
+                </Text>
+                <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                  <Text style={[styles.badgeText, { color: badge.text }]}>
+                    {badgeLabel}
+                  </Text>
+                </View>
+              </View>
 
-        </View>
+              {/* Details row */}
+              <Text style={styles.tourDetails}>
+                {formatTimeRange(event.start_time, event.end_time)}
+                {event.property ? `  ·  ${formatPropertyDetails(event)}` : ''}
+              </Text>
+
+              {/* Bottom row: joined / apply + delete */}
+              <View style={styles.tourBottomRow}>
+                <Text style={styles.tourMeta}>
+                  0 joined  ·  <Text style={{ color: colors.green500 }}>0 want to apply</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={() => handleDeleteEvent(event.id, address)}
+                >
+                  <Ionicons name="trash-outline" size={20} color={colors.coral500} />
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          );
+        })}
       </ScrollView>
+
+      {/* FAB */}
+      <Animated.View style={[styles.fab, { transform: [{ scale: fabScale }] }]}>
+        <TouchableOpacity
+          activeOpacity={1}
+          onPressIn={onFabPressIn}
+          onPressOut={onFabPressOut}
+          onPress={() => parentNav.navigate('CreateEvent', {})}
+          style={styles.fabTouchable}
+        >
+          <Ionicons name="add" size={24} color={colors.white} />
+        </TouchableOpacity>
+      </Animated.View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { flex: 1, padding: 20, paddingTop: 12 },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  container: {
+    flex: 1,
+    backgroundColor: colors.white,
   },
-  cardHeader: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: 100, // room for FAB
+  },
+
+  // Date
+  dateLabel: {
+    ...typography.caption,
+    color: colors.ink600,
+    marginBottom: spacing.md,
+  },
+
+  // Metric cards row
+  metricsRow: {
+    marginBottom: spacing.lg,
+    marginHorizontal: -spacing.xl, // bleed to screen edge
+  },
+  metricsContent: {
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  metricCard: {
+    width: 120,
+    backgroundColor: colors.ink50,
+    borderRadius: radii.lg,
+    padding: 14,
+  },
+  metricLabel: {
+    ...typography.caption,
+    color: colors.ink600,
+    marginBottom: spacing.xs,
+  },
+  metricValue: {
+    fontSize: 22,
+    fontWeight: '500',
+    color: colors.ink900,
+  },
+
+  // Tour card
+  tourCard: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.ink200,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  tourTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: spacing.xs,
   },
-  cardHeaderText: {
+  tourAddress: {
+    ...typography.subheading,
+    color: colors.ink900,
     flex: 1,
+    marginRight: spacing.sm,
   },
-  cardTitle: { fontSize: 14, color: '#64748b', fontWeight: '600', marginBottom: 8 },
-  cardSubtext: { fontSize: 14, color: '#94a3b8', marginTop: 8 },
-  property: { fontSize: 18, fontWeight: '600', color: '#1e293b', marginBottom: 8 },
-  deleteButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#fee2e2',
-    marginLeft: 12,
+  badge: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
   },
-  deleteButtonText: {
-    fontSize: 20,
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
-  buttonRow: {
+  tourDetails: {
+    ...typography.caption,
+    color: colors.ink600,
+    marginBottom: spacing.sm,
+  },
+  tourBottomRow: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  button: {
-    backgroundColor: '#2563eb',
-    padding: 14,
-    borderRadius: 8,
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  buttonHalf: {
+  tourMeta: {
+    ...typography.caption,
+    color: colors.ink600,
+  },
+  deleteButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // FAB
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.coral500,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  fabTouchable: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Empty state
+  emptyContainer: {
     flex: 1,
-    backgroundColor: '#2563eb',
-    padding: 14,
-    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing['3xl'],
+  },
+  emptyHeading: {
+    ...typography.heading,
+    color: colors.ink900,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  emptyBody: {
+    ...typography.body,
+    color: colors.ink400,
+    textAlign: 'center',
+    marginBottom: spacing['2xl'],
+  },
+  primaryButton: {
+    backgroundColor: colors.navy900,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing['2xl'],
+    minHeight: 48,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  actions: { gap: 12, marginTop: 8 },
-  actionButton: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  actionButtonText: { fontSize: 16, fontWeight: '600', color: '#334155', textAlign: 'center' },
-  sectionTitle: { 
-    fontSize: 18, 
-    fontWeight: '600', 
-    color: '#334155', 
-    marginBottom: 12 
-  },
-  eventTime: { 
-    fontSize: 14, 
-    color: '#64748b', 
-    marginBottom: 12 
+  primaryButtonText: {
+    ...typography.subheading,
+    color: colors.white,
   },
 });
 

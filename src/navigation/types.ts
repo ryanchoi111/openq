@@ -27,7 +27,6 @@ export type TenantStackParamList = {
 export type AgentTabParamList = {
   AgentHome: undefined;
   Properties: undefined;
-  CreateEvent: undefined;
   EventHistory: undefined;
   Profile: undefined;
 };

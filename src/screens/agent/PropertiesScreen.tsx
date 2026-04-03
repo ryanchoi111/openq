@@ -3,10 +3,12 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { propertyService } from '../../services/propertyService';
 import { Property } from '../../types';
+import { colors, typography, spacing, radii } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Properties'>;
 
@@ -41,8 +43,9 @@ const PropertiesScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         }
         renderItem={({ item }) => (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
+            activeOpacity={0.7}
             onPress={() => navigation.navigate('EditProperty', { propertyId: item.id })}
           >
             <Text style={styles.address}>
@@ -55,19 +58,84 @@ const PropertiesScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
         contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Ionicons name="home-outline" size={48} color={colors.ink200} />
+            <Text style={styles.emptyTitle}>No properties yet</Text>
+            <Text style={styles.emptyBody}>Add your first property to get started</Text>
+            <TouchableOpacity
+              style={styles.emptyCta}
+              onPress={() => navigation.navigate('CreateProperty')}
+            >
+              <Text style={styles.emptyCtaText}>+ Add Property</Text>
+            </TouchableOpacity>
+          </View>
+        }
       />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  list: { padding: 20 },
-  addButton: { backgroundColor: '#2563eb', padding: 16, borderRadius: 8, marginBottom: 16 },
-  addButtonText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 8, marginBottom: 12 },
-  address: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
-  details: { fontSize: 14, color: '#64748b', marginTop: 4 },
+  container: { flex: 1, backgroundColor: colors.white },
+  list: { padding: spacing.xl },
+  addButton: {
+    backgroundColor: colors.coral500,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: radii.md,
+    marginBottom: spacing.lg,
+  },
+  addButtonText: {
+    color: colors.white,
+    ...typography.subheading,
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: colors.white,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.ink200,
+  },
+  address: {
+    ...typography.subheading,
+    color: colors.ink900,
+  },
+  details: {
+    ...typography.caption,
+    color: colors.ink600,
+    marginTop: spacing.xs,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyTitle: {
+    ...typography.heading,
+    color: colors.ink900,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  emptyBody: {
+    ...typography.caption,
+    color: colors.ink400,
+    marginBottom: spacing['2xl'],
+  },
+  emptyCta: {
+    backgroundColor: colors.coral500,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing['3xl'],
+  },
+  emptyCtaText: {
+    color: colors.white,
+    ...typography.subheading,
+  },
 });
 
 export default PropertiesScreen;
