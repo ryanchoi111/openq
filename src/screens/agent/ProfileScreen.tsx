@@ -28,6 +28,13 @@ import { colors, typography, spacing, radii } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Profile'>;
 
+interface PropertyGroup {
+    propertyAddress: string;
+    requests: TourRequest[];
+    mostRecent: TourRequest;
+    sources: ('zillow' | 'streeteasy')[];
+}
+
 const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, refreshUserProfile, deleteAccount } = useAuth();
   const [uploading, setUploading] = useState(false);
@@ -45,12 +52,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   const PAGE_SIZE = 5;
 
-  interface PropertyGroup {
-    propertyAddress: string;
-    requests: TourRequest[];
-    mostRecent: TourRequest;
-    sources: ('zillow' | 'streeteasy')[];
-  }
+  
 
   const propertyGroups = useMemo(() => {
     const groupMap = new Map<string, TourRequest[]>();
@@ -599,7 +601,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
 
                     {/* Horizontal paged list of property groups */}
-                    <FlatList
+                    <FlatList<PropertyGroup[]>
                       ref={tourListRef}
                       data={groupPages}
                       keyExtractor={(_, index) => `page-${index}`}
