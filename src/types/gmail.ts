@@ -1,9 +1,9 @@
 /**
- * Gmail monitoring & Zillow email detection types
+ * Gmail monitoring & tour request email detection types (Zillow, StreetEasy)
  */
 
-/** Parsed Zillow tour request data */
-export interface ZillowTourRequest {
+/** Parsed tour request data (Zillow or StreetEasy) */
+export interface TourRequest {
   clientName: string;
   clientEmail: string;
   clientPhone?: string;
@@ -12,6 +12,7 @@ export interface ZillowTourRequest {
   receivedAt: string;
   gmailMessageId: string;
   agentEmail: string;
+  source?: 'zillow' | 'streeteasy';
 }
 
 /** Gmail Pub/Sub push notification payload */
@@ -50,6 +51,6 @@ export interface AgentGmailConnection {
 export interface WebhookProcessingResult {
   emailAddress: string;
   messagesProcessed: number;
-  zillowEmailsFound: ZillowTourRequest[];
+  tourEmailsFound: TourRequest[];
   errors: string[];
 }

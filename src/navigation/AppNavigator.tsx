@@ -42,6 +42,7 @@ import ProfileScreen from '../screens/agent/ProfileScreen';
 import SelectTenantsScreen from '../screens/agent/SelectTenantsScreen';
 import EditEmailTemplateScreen from '../screens/agent/EditEmailTemplateScreen';
 import TourRequestDetailScreen from '../screens/agent/TourRequestDetailScreen';
+import PropertyTourRequestsScreen from '../screens/agent/PropertyTourRequestsScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const TenantStack = createNativeStackNavigator<TenantStackParamList>();
@@ -240,6 +241,11 @@ const AgentNavigator = () => {
         name="EditEmailTemplate"
         component={EditEmailTemplateScreen}
         options={{ title: 'Edit Email Template' }}
+      />
+      <AgentStack.Screen
+        name="PropertyTourRequests"
+        component={PropertyTourRequestsScreen}
+        options={{ title: 'Property Requests' }}
       />
       <AgentStack.Screen
         name="TourRequestDetail"

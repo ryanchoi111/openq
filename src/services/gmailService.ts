@@ -9,7 +9,7 @@ import { supabase, supabaseUrl } from '../config/supabase';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
-import type { ZillowTourRequest, AgentGmailConnection } from '../types/gmail';
+import type { TourRequest, AgentGmailConnection } from '../types/gmail';
 
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '';
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '';
@@ -123,6 +123,11 @@ export async function connectGmailAccount(agentId: string): Promise<{ success: b
       return { success: false, error: watchResult.error || 'Failed to set up email monitoring' };
     }
 
+    // Backfill historical tour request emails
+    backfillTourRequests(agentId).catch((err) =>
+      console.error('Background backfill failed:', err)
+    );
+
     return { success: true };
   } catch (error) {
     console.error('Gmail OAuth error:', error);
@@ -198,17 +203,17 @@ export async function disconnectGmailAccount(agentId: string): Promise<{ success
 }
 
 /**
- * Fetch Zillow tour requests for an agent.
+ * Fetch tour requests for an agent.
  */
-export async function getZillowTourRequests(agentId: string): Promise<ZillowTourRequest[]> {
+export async function getTourRequests(agentId: string): Promise<TourRequest[]> {
   const { data, error } = await supabase
-    .from('zillow_tour_requests')
+    .from('tour_requests')
     .select('*')
     .eq('agent_id', agentId)
     .order('received_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching Zillow tour requests:', error);
+    console.error('Error fetching tour requests:', error);
     return [];
   }
 
@@ -221,7 +226,43 @@ export async function getZillowTourRequests(agentId: string): Promise<ZillowTour
     receivedAt: row.received_at,
     gmailMessageId: row.gmail_message_id,
     agentEmail: row.agent_email || '',
+    source: row.source,
   }));
+}
+
+/**
+ * Backfill historical tour request emails from before the watch was set up.
+ * Searches Gmail for StreetEasy and Zillow emails and inserts them.
+ */
+export async function backfillTourRequests(
+  agentId: string,
+  maxResults = 200
+): Promise<{ success: boolean; tourRequestsFound?: number; error?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/gmail-backfill`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ agentId, maxResults }),
+    });
+
+    const data = await response.json();
+    return {
+      success: data.success,
+      tourRequestsFound: data.tourRequestsFound,
+      error: data.error,
+    };
+  } catch (error) {
+    console.error('Gmail backfill error:', error);
+    return { success: false, error: 'Failed to backfill tour requests' };
+  }
 }
 
 /**
