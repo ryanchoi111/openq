@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,41 +15,27 @@ import { Ionicons } from '@expo/vector-icons';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../config/supabase';
+import type { AgentUser } from '../../types';
+import type { TourRequest } from '../../types/gmail';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'TourRequestDetail'>;
+
+function buildDefaultBody(calLink: string, tourRequest: TourRequest, user: AgentUser | null): string {
+  const address = tourRequest.propertyAddress || 'the property';
+  let body = `Hi ${tourRequest.clientName},\n\nThank you for your interest in ${address}!`;
+  if (calLink) body += ` Book a tour using this link: ${calLink}`;
+  body += `\n\nBest regards,\n${user?.name || 'Agent'}`;
+  return body;
+}
 
 const TourRequestDetailScreen: React.FC<Props> = ({ route }) => {
   const { tourRequest } = route.params;
   const { user } = useAuth();
-  const [calLink, setCalLink] = useState('');
-  const [emailBody, setEmailBody] = useState('');
+  const agent = user as AgentUser;
+  const calLink = agent?.cal_link || '';
+  const [emailBody, setEmailBody] = useState(() => buildDefaultBody(calLink, tourRequest, agent));
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-
-  useEffect(() => {
-    const loadCalLink = async () => {
-      if (!user) return;
-      const { data } = await supabase
-        .from('users')
-        .select('cal_link')
-        .eq('id', user.id)
-        .single();
-      const link = data?.cal_link || '';
-      setCalLink(link);
-      setEmailBody(buildDefaultBody(link));
-    };
-    loadCalLink();
-  }, [user]);
-
-  const buildDefaultBody = (link: string) => {
-    const address = tourRequest.propertyAddress || 'the property';
-    let body = `Hi ${tourRequest.clientName},\n\nThank you for your interest in ${address}!`;
-    if (link) {
-      body += ` Book a tour using this link: ${link}`;
-    }
-    body += `\n\nBest regards,\n${user?.name || 'Agent'}`;
-    return body;
-  };
 
   const subject = `Tour Request: ${tourRequest.propertyAddress || 'Property'}`;
 

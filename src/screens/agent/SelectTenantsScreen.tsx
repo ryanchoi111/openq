@@ -58,7 +58,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleSendApplication = async () => {
-    if (!user || user.role === 'guest' || !('housing_application_url' in user) || !user.housing_application_url) {
+    if (!user || user.role !== 'agent' || !user.housing_application_url) {
       Alert.alert(
         'No Application Uploaded',
         'Please upload a housing application in your profile first.',
@@ -111,9 +111,7 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
           onPress: async () => {
             try {
               setSending(true);
-              const applicationUrl = user.role !== 'guest' && 'housing_application_url' in user
-                ? user.housing_application_url
-                : '';
+              const applicationUrl = user.housing_application_url || '';
 
               if (!applicationUrl) {
                 throw new Error('No housing application found');

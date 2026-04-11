@@ -8,15 +8,22 @@ export * from './gmail';
 export type UserRole = 'agent' | 'tenant' | 'guest';
 
 // Auth types
-export interface User {
+interface BaseUser {
   id: string;
   email?: string;
   name: string;
-  role: UserRole;
   profile_picture?: string;
+  created_at: string;
+}
+
+export interface AgentUser extends BaseUser {
+  role: 'agent';
   housing_application_url?: string;
   cal_link?: string;
-  created_at: string;
+}
+
+export interface TenantUser extends BaseUser {
+  role: 'tenant';
 }
 
 export interface GuestUser {
@@ -25,6 +32,8 @@ export interface GuestUser {
   email: string;
   role: 'guest';
 }
+
+export type User = AgentUser | TenantUser | GuestUser;
 
 // Property types
 export interface Property {

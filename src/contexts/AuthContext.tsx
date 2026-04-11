@@ -16,7 +16,7 @@ import { User, GuestUser, UserRole } from '../types';
 WebBrowser.maybeCompleteAuthSession();
 
 interface AuthContextType {
-  user: User | GuestUser | null;
+  user: User | null;
   session: Session | null;
   isGuest: boolean;
   isAuthenticated: boolean;
