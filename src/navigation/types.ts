@@ -46,5 +46,6 @@ export type AgentStackParamList = {
   CompletedEventWaitlist: { eventId: string };
   SelectTenants: { eventId: string };
   EditEmailTemplate: undefined;
-  TourRequestDetail: { tourRequest: import('../types/gmail').ZillowTourRequest };
+  TourRequestDetail: { tourRequest: import('../types/gmail').TourRequest };
+  PropertyTourRequests: { propertyAddress: string; tourRequests: import('../types/gmail').TourRequest[] };
 };

@@ -5,11 +5,11 @@
 
 import { supabase } from '../config/supabase';
 import * as SecureStore from 'expo-secure-store';
-import { WaitlistEntry, GuestUser, User } from '../types';
+import { WaitlistEntry, User } from '../types';
 
 interface JoinWaitlistParams {
   eventId: string;
-  user: User | GuestUser;
+  user: User;
 }
 
 export const waitlistService = {

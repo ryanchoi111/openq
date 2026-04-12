@@ -2,8 +2,8 @@
  * Gmail Webhook Edge Function
  *
  * Receives Google Cloud Pub/Sub push notifications when new emails arrive
- * in a monitored Gmail account. Fetches the email, checks if it's from
- * Zillow, and parses tour request data.
+ * in a monitored Gmail account. Detects tour request emails from Zillow
+ * and StreetEasy, parses client info, and stores them.
  *
  * CRITICAL: Must respond within 1 second. Processing happens async.
  */
@@ -13,84 +13,117 @@ const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
 
 // --- Email Parser ---
 
-interface ParsedZillowEmail {
+type EmailSource = 'zillow' | 'streeteasy';
+
+interface ParsedTourEmail {
   clientName: string;
   clientEmail: string;
   clientPhone?: string;
   propertyAddress: string;
+  source: EmailSource;
 }
 
 /**
- * Check if a Gmail message is from Zillow based on From/Subject headers.
+ * Detect which tour-request source an email is from (if any).
+ * Returns the source or null if it's not a recognized tour email.
  */
-function isZillowEmail(headers: { name: string; value: string }[], body: string): boolean {
+function detectEmailSource(
+  headers: { name: string; value: string }[],
+  body: string
+): EmailSource | null {
   const from = headers.find((h) => h.name.toLowerCase() === 'from')?.value?.toLowerCase() ?? '';
   const subject = headers.find((h) => h.name.toLowerCase() === 'subject')?.value?.toLowerCase() ?? '';
-
   const bodyLower = body.toLowerCase();
-  const fromMatch = from.includes('rentalclientservices@zillowrentals.com');
-  const subjectMatch = subject.includes('new zillow group rentals contact:');
-  const bodyMatch = bodyLower.includes('tour') || bodyLower.includes('schedule a tour');
 
-  // Direct Zillow email
-  if (fromMatch && subjectMatch && bodyMatch) return true;
+  // StreetEasy: from noreply@email.streeteasy.com, subject contains "streeteasy inquiry from"
+  if (from.includes('noreply@email.streeteasy.com') && subject.includes('streeteasy inquiry from')) {
+    return 'streeteasy';
+  }
 
-  // Forwarded Zillow email
+  // Zillow direct: from rentalclientservices@zillowrentals.com
+  const isZillowFrom = from.includes('rentalclientservices@zillowrentals.com');
+  const isZillowSubject = subject.includes('new zillow group rentals contact:');
+  const hasTourKeyword = bodyLower.includes('tour') || bodyLower.includes('schedule a tour');
+
+  if (isZillowFrom && isZillowSubject && hasTourKeyword) return 'zillow';
+
+  // Forwarded Zillow
   const isForwarded = subject.includes('fwd:') || subject.includes('fw:');
-  const bodyHasZillow = bodyLower.includes('rentalclientservices@zillowrentals.com') || bodyLower.includes('zillow group rentals');
+  const bodyHasZillow =
+    bodyLower.includes('rentalclientservices@zillowrentals.com') ||
+    bodyLower.includes('zillow group rentals');
 
-  return isForwarded && bodyHasZillow && bodyMatch;
+  if (isForwarded && bodyHasZillow && hasTourKeyword) return 'zillow';
+
+  return null;
 }
+
+// --- StreetEasy parser ---
+
+/**
+ * Parse StreetEasy tour request email.
+ *
+ * Subject format: "<Address> StreetEasy Inquiry From <Name>"
+ * Body contains: "{Name} Has Requested a Tour for {Address}"
+ * Contact line: "{Name} | {email} | {phone}"  (pipe-separated)
+ */
+function parseStreetEasyEmail(
+  headers: { name: string; value: string }[],
+  body: string
+): ParsedTourEmail | null {
+  const subject = headers.find((h) => h.name.toLowerCase() === 'subject')?.value ?? '';
+
+  // Extract name + address from subject
+  // e.g. "165 East 35th Street #12J StreetEasy Inquiry From Pablo Pigorini"
+  const subjectMatch = subject.match(/^(.+?)\s+StreetEasy\s+Inquiry\s+From\s+(.+)$/i);
+
+  let clientName = '';
+  let propertyAddress = '';
+
+  if (subjectMatch) {
+    propertyAddress = subjectMatch[1].trim();
+    clientName = subjectMatch[2].trim();
+  } else {
+    // Fallback: try body for "Has Requested a Tour for <address>"
+    const bodyNameAddr = body.match(/(.+?)\s+Has Requested a Tour for\s+(.+)/i);
+    if (bodyNameAddr) {
+      clientName = bodyNameAddr[1].trim();
+      propertyAddress = bodyNameAddr[2].trim();
+    }
+  }
+
+  if (!clientName) return null;
+
+  // Extract email from body (standalone email address)
+  const emailMatch = body.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  // Extract phone: +13476011118 or similar patterns
+  const phoneMatch = body.match(/(\+?\d{10,})/);
+
+  return {
+    clientName,
+    clientEmail: emailMatch?.[1] ?? '',
+    clientPhone: phoneMatch?.[1],
+    propertyAddress,
+    source: 'streeteasy',
+  };
+}
+
+// --- Zillow parser ---
 
 /**
  * Extract property address from Zillow subject line.
  * Format: "New Zillow Group Rentals Contact: <Address>"
  */
-function extractAddressFromSubject(subject: string): string | null {
+function extractZillowAddressFromSubject(subject: string): string | null {
   const match = subject.match(/New Zillow Group Rentals Contact:\s*(.+)/i);
   return match ? match[1].trim() : null;
 }
 
 /**
- * Extract plain text body from a Gmail message payload.
- * Handles both simple and multipart MIME structures.
- */
-function getEmailBody(payload: any): string {
-  // Simple message with body data directly
-  if (payload.body?.data) {
-    return atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-  }
-
-  // Multipart message — find text/plain part
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/plain' && part.body?.data) {
-        return atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-      }
-      // Recurse into nested multipart
-      if (part.parts) {
-        const nested = getEmailBody(part);
-        if (nested) return nested;
-      }
-    }
-    // Fallback to text/html if no text/plain
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/html' && part.body?.data) {
-        const html = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-        return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      }
-    }
-  }
-
-  return '';
-}
-
-/**
  * Parse Zillow email body to extract client info.
- * Returns null if required fields are missing.
  */
-function parseZillowEmail(body: string): ParsedZillowEmail | null {
-  // Try original format first (Name: ..., Email: ..., Property: ...)
+function parseZillowEmail(body: string): ParsedTourEmail | null {
+  // Try structured format (Name: ..., Email: ..., Property: ...)
   const nameMatchOld = body.match(/Name:\s*(.+)/i);
   const emailMatchOld = body.match(/Email:\s*([^\s]+@[^\s]+)/i);
   const propertyMatchOld = body.match(/(?:Property|Address):\s*(.+)/i);
@@ -104,30 +137,57 @@ function parseZillowEmail(body: string): ParsedZillowEmail | null {
         clientEmail,
         clientPhone: phoneMatchOld?.[1]?.trim(),
         propertyAddress: propertyMatchOld[1].trim(),
+        source: 'zillow',
       };
     }
   }
 
-  // Zillow Rentals "New Contact" format
-  // Name: "Ryan Choi says:" after "New Contact"
+  // "New Contact" format: "New Contact Ryan Choi says:"
   const nameMatch = body.match(/New Contact\s+(.+?)\s+says:/i);
-  // Email: standalone email in body
   const emailMatch = body.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-  // Phone: pattern like 617.879.8838 or (555) 123-4567
   const phoneMatch = body.match(/(\d{3}[.\-)\s]+\d{3}[.\-\s]+\d{4})/);
-  // Address: line after "Your listing" section, look for street address pattern
   const addressMatch = body.match(/(\d+\s+[\w\s]+(?:#\w+)?[,\s]+\w[\w\s]+,\s*[A-Z]{2})/);
 
-  if (!nameMatch || !emailMatch) {
-    return null;
-  }
+  if (!nameMatch || !emailMatch) return null;
 
   return {
     clientName: nameMatch[1].trim(),
     clientEmail: emailMatch[1].trim(),
     clientPhone: phoneMatch?.[1]?.trim(),
     propertyAddress: addressMatch?.[1]?.trim() || '',
+    source: 'zillow',
   };
+}
+
+/**
+ * Extract plain text body from a Gmail message payload.
+ * Handles both simple and multipart MIME structures.
+ */
+function getEmailBody(payload: any): string {
+  if (payload.body?.data) {
+    return atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+  }
+
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        return atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+      }
+      if (part.parts) {
+        const nested = getEmailBody(part);
+        if (nested) return nested;
+      }
+    }
+    // Fallback to text/html stripped of tags
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/html' && part.body?.data) {
+        const html = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+        return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+    }
+  }
+
+  return '';
 }
 
 // --- Gmail API helpers ---
@@ -138,9 +198,6 @@ interface OAuthTokens {
   token_type: string;
 }
 
-/**
- * Exchange a refresh token for a fresh access token.
- */
 async function getAccessToken(refreshToken: string, oauthClientId?: string): Promise<string> {
   const clientId = oauthClientId || GOOGLE_CLIENT_ID;
   const isNativeClient = clientId !== GOOGLE_CLIENT_ID;
@@ -179,13 +236,7 @@ class AuthError extends Error {
   }
 }
 
-/**
- * Fetch new messages since a given historyId using Gmail history API.
- */
-async function fetchNewMessages(
-  accessToken: string,
-  historyId: string
-): Promise<string[]> {
+async function fetchNewMessages(accessToken: string, historyId: string): Promise<string[]> {
   const url = `https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=${historyId}&historyTypes=messageAdded&labelId=INBOX`;
 
   const response = await fetch(url, {
@@ -193,19 +244,11 @@ async function fetchNewMessages(
   });
 
   if (response.status === 404) {
-    // historyId too old, need full sync — return empty for now
     console.warn('History ID expired, no messages returned');
     return [];
   }
-
-  if (response.status === 401) {
-    throw new AuthError('Access token expired');
-  }
-
-  if (response.status === 429) {
-    throw new Error('Gmail API rate limited');
-  }
-
+  if (response.status === 401) throw new AuthError('Access token expired');
+  if (response.status === 429) throw new Error('Gmail API rate limited');
   if (!response.ok) {
     throw new Error(`Gmail history API error (${response.status}): ${await response.text()}`);
   }
@@ -213,7 +256,6 @@ async function fetchNewMessages(
   const data = await response.json();
   if (!data.history) return [];
 
-  // Collect unique message IDs from history
   const messageIds = new Set<string>();
   for (const entry of data.history) {
     if (entry.messagesAdded) {
@@ -226,9 +268,6 @@ async function fetchNewMessages(
   return Array.from(messageIds);
 }
 
-/**
- * Fetch full message details from Gmail API.
- */
 async function fetchMessage(accessToken: string, messageId: string): Promise<any> {
   const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`;
 
@@ -236,13 +275,8 @@ async function fetchMessage(accessToken: string, messageId: string): Promise<any
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (response.status === 401) {
-    throw new AuthError('Access token expired');
-  }
-
-  if (!response.ok) {
-    throw new Error(`Gmail message fetch error (${response.status})`);
-  }
+  if (response.status === 401) throw new AuthError('Access token expired');
+  if (!response.ok) throw new Error(`Gmail message fetch error (${response.status})`);
 
   return response.json();
 }
@@ -250,7 +284,6 @@ async function fetchMessage(accessToken: string, messageId: string): Promise<any
 // --- Webhook handler ---
 
 Deno.serve(async (req: Request) => {
-  // Must respond quickly — Pub/Sub requires ack within 10s
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200 });
   }
@@ -262,11 +295,10 @@ Deno.serve(async (req: Request) => {
   try {
     const pubsubMessage = await req.json();
 
-    // Decode Pub/Sub message data
     const data = pubsubMessage?.message?.data;
     if (!data) {
       console.error('No data in Pub/Sub message');
-      return new Response('OK', { status: 200 }); // Ack to prevent redelivery
+      return new Response('OK', { status: 200 });
     }
 
     const decoded = JSON.parse(atob(data));
@@ -280,12 +312,6 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[Gmail Webhook] Notification for ${emailAddress}, historyId: ${historyId}`);
 
-    // Respond immediately, process in background
-    // Note: In Deno Deploy/Supabase Edge Functions, we can do async work
-    // after responding, but the function may be killed. Instead, we process
-    // synchronously but keep it fast.
-
-    // Look up agent's refresh token and last historyId from Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
@@ -294,7 +320,7 @@ Deno.serve(async (req: Request) => {
       return new Response('OK', { status: 200 });
     }
 
-    // Use service role to query agent_gmail_connections
+    // Look up agent connection
     const connResponse = await fetch(
       `${supabaseUrl}/rest/v1/agent_gmail_connections?email=eq.${encodeURIComponent(emailAddress)}&select=*`,
       {
@@ -325,7 +351,6 @@ Deno.serve(async (req: Request) => {
       accessToken = await getAccessToken(connection.refresh_token, connection.oauth_client_id);
     } catch (err) {
       if (err instanceof AuthError) {
-        // Mark agent as needing re-auth
         await fetch(
           `${supabaseUrl}/rest/v1/agent_gmail_connections?id=eq.${connection.id}`,
           {
@@ -344,13 +369,11 @@ Deno.serve(async (req: Request) => {
       return new Response('OK', { status: 200 });
     }
 
-    // Fetch new message IDs since last historyId
     let messageIds: string[];
     try {
       messageIds = await fetchNewMessages(accessToken, lastHistoryId);
     } catch (err) {
       if (err instanceof AuthError) {
-        // Mark needs_reauth
         await fetch(
           `${supabaseUrl}/rest/v1/agent_gmail_connections?id=eq.${connection.id}`,
           {
@@ -371,59 +394,69 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[Gmail Webhook] Found ${messageIds.length} new messages for ${emailAddress}`);
 
-    const zillowResults: any[] = [];
+    const tourResults: any[] = [];
 
-    // Process each message
     for (const msgId of messageIds) {
       try {
         const message = await fetchMessage(accessToken, msgId);
         const headers = message.payload?.headers || [];
         const body = getEmailBody(message.payload);
-
-        if (!isZillowEmail(headers, body)) continue;
-
-        const parsed = parseZillowEmail(body);
         const subject = headers.find((h: any) => h.name.toLowerCase() === 'subject')?.value ?? '';
-        const fromHeader = headers.find((h: any) => h.name.toLowerCase() === 'from')?.value ?? '';
         const receivedAt = new Date(parseInt(message.internalDate)).toISOString();
-        const addressFromSubject = extractAddressFromSubject(subject);
+
+        const source = detectEmailSource(headers, body);
+        if (!source) continue;
+
+        let parsed: ParsedTourEmail | null = null;
+
+        if (source === 'streeteasy') {
+          parsed = parseStreetEasyEmail(headers, body);
+        } else if (source === 'zillow') {
+          parsed = parseZillowEmail(body);
+        }
 
         if (parsed) {
-          const result = {
+          // For Zillow, fall back to subject-extracted address if body parse missed it
+          if (source === 'zillow' && !parsed.propertyAddress) {
+            parsed.propertyAddress = extractZillowAddressFromSubject(subject) || subject;
+          }
+          tourResults.push({
             ...parsed,
-            propertyAddress: parsed.propertyAddress || addressFromSubject || subject,
             rawSubject: subject,
             receivedAt,
             gmailMessageId: msgId,
             agentEmail: emailAddress,
-          };
-          zillowResults.push(result);
-          console.log(`[Gmail Webhook] Zillow email parsed:`, {
+          });
+          console.log(`[Gmail Webhook] ${source} email parsed:`, {
             client: parsed.clientName,
-            property: result.propertyAddress,
+            property: parsed.propertyAddress,
           });
         } else {
-          // Fallback: extract address from subject, store with available info
-          const result = {
-            clientName: 'Zillow Lead',
+          // Fallback: store with whatever we can extract
+          const fromHeader = headers.find((h: any) => h.name.toLowerCase() === 'from')?.value ?? '';
+          const fallbackAddress =
+            source === 'zillow'
+              ? extractZillowAddressFromSubject(subject) || subject
+              : subject;
+          tourResults.push({
+            clientName: `${source === 'zillow' ? 'Zillow' : 'StreetEasy'} Lead`,
             clientEmail: fromHeader,
             clientPhone: undefined,
-            propertyAddress: addressFromSubject || subject,
+            propertyAddress: fallbackAddress,
+            source,
             rawSubject: subject,
             receivedAt,
             gmailMessageId: msgId,
             agentEmail: emailAddress,
-          };
-          zillowResults.push(result);
-          console.log(`[Gmail Webhook] Zillow email stored (fallback):`, { subject });
+          });
+          console.log(`[Gmail Webhook] ${source} email stored (fallback):`, { subject });
         }
       } catch (parseErr) {
-        // Never crash on a single email — log and continue
         console.error(`[Gmail Webhook] Error processing message ${msgId}:`, parseErr);
       }
     }
 
-    // Update historyId to latest
+    // Update historyId
     await fetch(
       `${supabaseUrl}/rest/v1/agent_gmail_connections?id=eq.${connection.id}`,
       {
@@ -438,21 +471,22 @@ Deno.serve(async (req: Request) => {
       }
     );
 
-    // If Zillow emails found, store them for the agent
-    if (zillowResults.length > 0) {
-      const records = zillowResults.map((z) => ({
+    // Store parsed tour requests
+    if (tourResults.length > 0) {
+      const records = tourResults.map((r) => ({
         agent_id: connection.agent_id,
-        gmail_message_id: z.gmailMessageId,
-        client_name: z.clientName,
-        client_email: z.clientEmail,
-        client_phone: z.clientPhone || null,
-        property_address: z.propertyAddress,
-        raw_subject: z.rawSubject,
-        received_at: z.receivedAt,
+        gmail_message_id: r.gmailMessageId,
+        client_name: r.clientName,
+        client_email: r.clientEmail,
+        client_phone: r.clientPhone || null,
+        property_address: r.propertyAddress,
+        raw_subject: r.rawSubject,
+        received_at: r.receivedAt,
+        source: r.source,
       }));
 
       const { error: insertErr } = await fetch(
-        `${supabaseUrl}/rest/v1/zillow_tour_requests`,
+        `${supabaseUrl}/rest/v1/tour_requests`,
         {
           method: 'POST',
           headers: {
@@ -469,7 +503,7 @@ Deno.serve(async (req: Request) => {
       });
 
       if (insertErr) {
-        console.error('Error inserting Zillow tour requests:', insertErr);
+        console.error('Error inserting tour requests:', insertErr);
       }
     }
 
@@ -477,13 +511,12 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         messagesProcessed: messageIds.length,
-        zillowEmailsFound: zillowResults.length,
+        tourEmailsFound: tourResults.length,
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('[Gmail Webhook] Unhandled error:', error);
-    // Always return 200 to prevent Pub/Sub redelivery on app errors
     return new Response('OK', { status: 200 });
   }
 });

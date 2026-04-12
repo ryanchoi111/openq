@@ -1,50 +1,33 @@
 /**
- * OpenQ Design Language
- * Centralized theme tokens — colors, typography, spacing, radii
+ * Shared design tokens
  */
 
 export const colors = {
-  // Navy (Primary)
-  navy900: '#1A2B4A',
-  navy700: '#2D4A7A',
-  navy400: '#4A7AB5',
-  navy100: '#C8DAF0',
-  navy50: '#EDF2F9',
-
-  // Coral (Accent)
-  coral500: '#E8734A',
-  coral300: '#F4A882',
-  coral50: '#FDEEE7',
-
-  // Green (Success)
-  green500: '#1B9E6D',
-  green50: '#E5F5EE',
-
-  // Ink (Neutral)
-  ink900: '#111318',
-  ink600: '#4A4D57',
-  ink400: '#8C8F99',
-  ink200: '#D4D5DA',
-  ink50: '#F5F5F7',
-
-  // Static
-  white: '#FFFFFF',
-
-  // Semantic badge text colors
-  greenDark: '#0F6E56',
-  coralDark: '#993C1D',
-} as const;
+  white: '#ffffff',
+  navy50: '#eff6ff',
+  navy400: '#60a5fa',
+  navy700: '#1d4ed8',
+  navy900: '#1e3a5f',
+  ink50: '#f8fafc',
+  ink200: '#e2e8f0',
+  ink400: '#94a3b8',
+  ink600: '#64748b',
+  ink900: '#1e293b',
+  coral500: '#f97066',
+  green50: '#ecfdf5',
+  green500: '#22c55e',
+  greenDark: '#15803d',
+};
 
 export const typography = {
-  display:    { fontSize: 28, fontWeight: '500' as const, lineHeight: 34 },
-  heading:    { fontSize: 20, fontWeight: '500' as const, lineHeight: 26 },
-  subheading: { fontSize: 16, fontWeight: '500' as const, lineHeight: 22 },
-  body:       { fontSize: 15, fontWeight: '400' as const, lineHeight: 22 },
-  caption:    { fontSize: 13, fontWeight: '400' as const, lineHeight: 18 },
-  label:      { fontSize: 12, fontWeight: '500' as const, lineHeight: 16 },
-  small:      { fontSize: 11, fontWeight: '500' as const, lineHeight: 13 },
-  tabLabel:   { fontSize: 10, fontWeight: '500' as const },
-} as const;
+  heading: { fontSize: 20 as const, fontWeight: '600' as const },
+  subheading: { fontSize: 16 as const, fontWeight: '600' as const },
+  body: { fontSize: 16 as const, fontWeight: '400' as const },
+  caption: { fontSize: 14 as const, fontWeight: '400' as const, lineHeight: 20 as const },
+  small: { fontSize: 12 as const, fontWeight: '600' as const },
+  label: { fontSize: 12 as const, fontWeight: '500' as const },
+  tabLabel: { fontSize: 10 as const, fontWeight: '500' as const },
+};
 
 export const spacing = {
   xs: 4,
@@ -57,46 +40,32 @@ export const spacing = {
 } as const;
 
 export const radii = {
-  sm: 4,
+  sm: 6,
   md: 8,
   lg: 12,
-  xl: 16,
-  full: 9999,
 } as const;
 
-// Badge configs keyed by status
 export const badgeStyles = {
+  'live-now': { bg: colors.green50, text: colors.greenDark },
+  upcoming: { bg: colors.navy50, text: colors.navy700 },
   'wants-to-apply': { bg: colors.green50, text: colors.greenDark },
-  'browsing':       { bg: colors.navy50, text: colors.navy700 },
-  'not-interested': { bg: colors.coral50, text: colors.coralDark },
-  'pending':        { bg: colors.ink50, text: colors.ink400 },
-  'live-now':       { bg: colors.green50, text: colors.greenDark },
-  'upcoming':       { bg: colors.navy50, text: colors.navy700 },
-  'ended':          { bg: colors.ink50, text: colors.ink400 },
-  // Waitlist statuses
-  'waiting':        { bg: colors.navy50, text: colors.navy700 },
-  'touring':        { bg: colors.green50, text: colors.greenDark },
-  'completed':      { bg: colors.ink50, text: colors.ink400 },
-  'skipped':        { bg: colors.coral50, text: colors.coralDark },
-  'no-show':        { bg: colors.coral50, text: colors.coralDark },
+  waiting: { bg: colors.ink50, text: colors.ink600 },
+  touring: { bg: colors.green50, text: colors.greenDark },
 } as const;
 
-// Avatar color rotation — assigned by hashing name
-const avatarColors = [colors.navy400, colors.coral500, colors.green500, colors.navy700, colors.ink400];
+const avatarColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#0ea5e9', '#e11d48', '#7c3aed'];
 
 export function getAvatarColor(name: string): string {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
 export function getInitials(name: string): string {
   return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('');
 }

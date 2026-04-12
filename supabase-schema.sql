@@ -106,8 +106,8 @@ CREATE TABLE IF NOT EXISTS public.agent_gmail_connections (
   CONSTRAINT agent_gmail_connections_agent_id_key UNIQUE (agent_id)
 );
 
--- Zillow tour requests parsed from Gmail
-CREATE TABLE IF NOT EXISTS public.zillow_tour_requests (
+-- Tour requests parsed from Gmail (Zillow, StreetEasy, etc.)
+CREATE TABLE IF NOT EXISTS public.tour_requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   agent_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   gmail_message_id TEXT NOT NULL,
@@ -116,10 +116,11 @@ CREATE TABLE IF NOT EXISTS public.zillow_tour_requests (
   client_phone TEXT,
   property_address TEXT,
   raw_subject TEXT,
+  source TEXT,
   received_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  CONSTRAINT zillow_tour_requests_gmail_message_id_key UNIQUE (gmail_message_id),
-  CONSTRAINT zillow_tour_requests_unique_lead UNIQUE (agent_id, client_email, property_address)
+  CONSTRAINT tour_requests_gmail_message_id_key UNIQUE (gmail_message_id),
+  CONSTRAINT tour_requests_unique_lead UNIQUE (agent_id, client_email, property_address)
 );
 
 -- Indexes for performance
@@ -139,7 +140,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_waitlist_unique_position
 -- Gmail indexes
 CREATE INDEX IF NOT EXISTS idx_gmail_connections_agent_id ON public.agent_gmail_connections(agent_id);
 CREATE INDEX IF NOT EXISTS idx_gmail_connections_email ON public.agent_gmail_connections(email);
-CREATE INDEX IF NOT EXISTS idx_zillow_tours_agent_id ON public.zillow_tour_requests(agent_id);
+CREATE INDEX IF NOT EXISTS idx_tour_requests_agent_id ON public.tour_requests(agent_id);
 
 -- Enable Row Level Security
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -148,7 +149,7 @@ ALTER TABLE public.open_house_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.waitlist_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_gmail_connections ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.zillow_tour_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tour_requests ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 
@@ -247,8 +248,8 @@ CREATE POLICY "Agents can update own gmail connections" ON public.agent_gmail_co
 CREATE POLICY "Agents can delete own gmail connections" ON public.agent_gmail_connections
   FOR DELETE USING (auth.uid() = agent_id);
 
--- Zillow tour requests: agents can read own requests
-CREATE POLICY "Agents can read own zillow requests" ON public.zillow_tour_requests
+-- Tour requests: agents can read own requests
+CREATE POLICY "Agents can read own tour requests" ON public.tour_requests
   FOR SELECT USING (auth.uid() = agent_id);
 
 -- Enable Realtime for waitlist updates

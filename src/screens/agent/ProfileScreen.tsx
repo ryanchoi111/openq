@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  FlatList,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -19,23 +21,89 @@ import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { SignOutButton } from '../../components/SignOutButton';
 import { profileService } from '../../services/profileService';
-import { getGmailConnectionStatus, getZillowTourRequests, connectGmailAccount, setupGmailWatch } from '../../services/gmailService';
+import { getGmailConnectionStatus, getTourRequests, connectGmailAccount, setupGmailWatch, backfillTourRequests } from '../../services/gmailService';
 import { supabase } from '../../config/supabase';
-import type { ZillowTourRequest } from '../../types/gmail';
-import { colors, typography, spacing, radii, getAvatarColor, getInitials } from '../../utils/theme';
+import type { TourRequest } from '../../types/gmail';
+import { colors, typography, spacing, radii, getInitials, getAvatarColor } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Profile'>;
+
+interface PropertyGroup {
+    propertyAddress: string;
+    requests: TourRequest[];
+    mostRecent: TourRequest;
+    sources: ('zillow' | 'streeteasy')[];
+}
 
 const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, refreshUserProfile, deleteAccount } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [uploadingApplication, setUploadingApplication] = useState(false);
   const [gmailConnected, setGmailConnected] = useState(false);
-  const [tourRequests, setTourRequests] = useState<ZillowTourRequest[]>([]);
+  const [tourRequests, setTourRequests] = useState<TourRequest[]>([]);
   const [loadingTours, setLoadingTours] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [tourPage, setTourPage] = useState(0);
+  const [sortNewestFirst, setSortNewestFirst] = useState(true);
+  const tourListRef = useRef<FlatList>(null);
   const [calLink, setCalLink] = useState((user && 'cal_link' in user ? user.cal_link : '') || '');
   const [savingCalLink, setSavingCalLink] = useState(false);
+
+  const PAGE_SIZE = 5;
+
+  
+
+  const propertyGroups = useMemo(() => {
+    const groupMap = new Map<string, TourRequest[]>();
+    for (const req of tourRequests) {
+      const key = req.propertyAddress || 'Unknown Address';
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(req);
+    }
+
+    const groups: PropertyGroup[] = [];
+    for (const [address, requests] of groupMap) {
+      const sorted = [...requests].sort(
+        (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
+      const sourceSet = new Set<'zillow' | 'streeteasy'>();
+      for (const r of requests) {
+        if (r.source) sourceSet.add(r.source);
+      }
+      groups.push({
+        propertyAddress: address,
+        requests: sorted,
+        mostRecent: sorted[0],
+        sources: Array.from(sourceSet),
+      });
+    }
+    return groups;
+  }, [tourRequests]);
+
+  const sortedGroups = useMemo(() => {
+    return [...propertyGroups].sort((a, b) => {
+      const diff =
+        new Date(b.mostRecent.receivedAt).getTime() -
+        new Date(a.mostRecent.receivedAt).getTime();
+      return sortNewestFirst ? diff : -diff;
+    });
+  }, [propertyGroups, sortNewestFirst]);
+
+  const totalPages = Math.ceil(sortedGroups.length / PAGE_SIZE);
+
+  const groupPages = useMemo(() => {
+    const pages: PropertyGroup[][] = [];
+    for (let i = 0; i < sortedGroups.length; i += PAGE_SIZE) {
+      pages.push(sortedGroups.slice(i, i + PAGE_SIZE));
+    }
+    return pages;
+  }, [sortedGroups]);
+
+  const onTourPageChange = useCallback((e: any) => {
+    const pageIndex = Math.round(e.nativeEvent.contentOffset.x / e.nativeEvent.layoutMeasurement.width);
+    setTourPage(pageIndex);
+  }, []);
 
   const handleSaveCalLink = async () => {
     if (!user) return;
@@ -44,11 +112,14 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       const { error } = await supabase
         .from('users')
         .update({ cal_link: calLink.trim() || null })
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .select()
+        .single();
       if (error) throw error;
-      await refreshUserProfile();
+      refreshUserProfile().catch(() => {});
       Alert.alert('Saved', 'Cal.com link updated');
     } catch (err) {
+      console.error('Error saving cal link:', err);
       Alert.alert('Error', 'Failed to save cal.com link');
     } finally {
       setSavingCalLink(false);
@@ -62,7 +133,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       const connection = await getGmailConnectionStatus(user.id);
       setGmailConnected(!!connection && !connection.needsReauth);
       if (connection && !connection.needsReauth) {
-        const tours = await getZillowTourRequests(user.id);
+        const tours = await getTourRequests(user.id);
         setTourRequests(tours);
       }
     } catch (err) {
@@ -91,6 +162,24 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('Error', 'Failed to connect Gmail');
     } finally {
       setConnectingGmail(false);
+    }
+  };
+
+  const handleBackfill = async () => {
+    if (!user) return;
+    setBackfilling(true);
+    try {
+      const result = await backfillTourRequests(user.id);
+      if (result.success) {
+        Alert.alert('Backfill Complete', `Found ${result.tourRequestsFound || 0} tour requests`);
+        await loadZillowData();
+      } else {
+        Alert.alert('Error', result.error || 'Backfill failed');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to backfill tour requests');
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -431,10 +520,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        {/* Zillow Tour Requests Section (agents only) */}
+        {/* Tour Requests Section (agents only) */}
         {user.role === 'agent' && (
           <View style={styles.zillowSection}>
-            <Text style={styles.sectionTitle}>Zillow Tour Requests</Text>
+            <Text style={styles.sectionTitle}>Tour Requests</Text>
             {!gmailConnected ? (
               <TouchableOpacity
                 style={styles.connectGmailButton}
@@ -452,56 +541,136 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               </TouchableOpacity>
             ) : (
               <>
-                <TouchableOpacity
-                  style={styles.reconnectGmailButton}
-                  onPress={handleReconnectGmail}
-                  disabled={connectingGmail}
-                >
-                  {connectingGmail ? (
-                    <ActivityIndicator size="small" color={colors.ink600} />
-                  ) : (
-                    <>
-                      <Ionicons name="refresh" size={16} color={colors.ink600} />
-                      <Text style={styles.reconnectGmailText}>Reconnect Gmail</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.gmailActions}>
+                  <TouchableOpacity
+                    style={styles.reconnectGmailButton}
+                    onPress={handleReconnectGmail}
+                    disabled={connectingGmail}
+                  >
+                    {connectingGmail ? (
+                      <ActivityIndicator size="small" color={colors.ink600} />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh" size={16} color={colors.ink600} />
+                        <Text style={styles.reconnectGmailText}>Reconnect</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.reconnectGmailButton}
+                    onPress={handleBackfill}
+                    disabled={backfilling}
+                  >
+                    {backfilling ? (
+                      <ActivityIndicator size="small" color={colors.ink600} />
+                    ) : (
+                      <>
+                        <Ionicons name="download-outline" size={16} color={colors.ink600} />
+                        <Text style={styles.reconnectGmailText}>Sync Past Emails</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
                 {loadingTours ? (
                   <ActivityIndicator size="small" color={colors.navy900} style={{ marginVertical: spacing.lg }} />
                 ) : tourRequests.length === 0 ? (
                   <View style={styles.emptyTours}>
                     <Ionicons name="mail-unread-outline" size={32} color={colors.ink400} />
-                    <Text style={styles.emptyToursText}>No Zillow tour requests yet</Text>
+                    <Text style={styles.emptyToursText}>No tour requests yet</Text>
                     <Text style={styles.emptyToursSubtext}>
-                      Emails from Zillow will appear here automatically
+                      Emails from Zillow and StreetEasy will appear here automatically
                     </Text>
                   </View>
                 ) : (
-                  tourRequests.map((tour) => (
-                    <TouchableOpacity
-                      key={tour.gmailMessageId}
-                      style={styles.tourCard}
-                      onPress={() => navigation.navigate('TourRequestDetail', { tourRequest: tour })}
-                    >
-                      <View style={styles.tourHeader}>
-                        <Ionicons name="home-outline" size={18} color={colors.navy900} />
-                        <Text style={styles.tourAddress} numberOfLines={2}>
-                          {tour.propertyAddress}
-                        </Text>
-                        <Ionicons name="chevron-forward" size={18} color={colors.ink400} />
-                      </View>
-                      <View style={styles.tourDetails}>
-                        <Text style={styles.tourClient}>{tour.clientName}</Text>
-                        <Text style={styles.tourEmail}>{tour.clientEmail}</Text>
-                        {tour.clientPhone && (
-                          <Text style={styles.tourPhone}>{tour.clientPhone}</Text>
-                        )}
-                      </View>
-                      <Text style={styles.tourDate}>
-                        {new Date(tour.receivedAt).toLocaleDateString()}
+                  <>
+                    {/* Sort toggle + count */}
+                    <View style={styles.tourListHeader}>
+                      <Text style={styles.tourCount}>
+                        {sortedGroups.length} {sortedGroups.length === 1 ? 'property' : 'properties'} ({tourRequests.length} requests)
                       </Text>
-                    </TouchableOpacity>
-                  ))
+                      <TouchableOpacity
+                        style={styles.sortButton}
+                        onPress={() => {
+                          setSortNewestFirst((prev) => !prev);
+                          setTourPage(0);
+                          tourListRef.current?.scrollToOffset({ offset: 0, animated: false });
+                        }}
+                      >
+                        <Ionicons
+                          name={sortNewestFirst ? 'arrow-down' : 'arrow-up'}
+                          size={14}
+                          color={colors.ink600}
+                        />
+                        <Text style={styles.sortButtonText}>
+                          {sortNewestFirst ? 'Newest first' : 'Oldest first'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Horizontal paged list of property groups */}
+                    <FlatList<PropertyGroup[]>
+                      ref={tourListRef}
+                      data={groupPages}
+                      keyExtractor={(_, index) => `page-${index}`}
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      onMomentumScrollEnd={onTourPageChange}
+                      renderItem={({ item: page }) => (
+                        <View style={styles.tourPage}>
+                          {page.map((group) => (
+                            <TouchableOpacity
+                              key={group.propertyAddress}
+                              style={styles.tourCard}
+                              onPress={() =>
+                                navigation.navigate('PropertyTourRequests', {
+                                  propertyAddress: group.propertyAddress,
+                                  tourRequests: group.requests,
+                                })
+                              }
+                            >
+                              <View style={styles.tourHeader}>
+                                <Ionicons name="home-outline" size={18} color={colors.navy900} />
+                                <Text style={styles.tourAddress} numberOfLines={2}>
+                                  {group.propertyAddress}
+                                </Text>
+                                <Ionicons name="chevron-forward" size={18} color={colors.ink400} />
+                              </View>
+                              <View style={styles.tourDetails}>
+                                <Text style={styles.tourClient}>
+                                  {group.requests.length} {group.requests.length === 1 ? 'request' : 'requests'}
+                                </Text>
+                                <Text style={styles.tourEmail}>
+                                  Latest: {group.mostRecent.clientName} · {new Date(group.mostRecent.receivedAt).toLocaleDateString()}
+                                </Text>
+                              </View>
+                              <View style={styles.sourceBadgeRow}>
+                                {group.sources.map((src) => (
+                                  <View key={src} style={styles.sourceBadge}>
+                                    <Text style={styles.sourceBadgeText}>
+                                      {src === 'streeteasy' ? 'StreetEasy' : 'Zillow'}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    />
+
+                    {/* Page indicator */}
+                    {totalPages > 1 && (
+                      <View style={styles.pageIndicator}>
+                        {Array.from({ length: totalPages }).map((_, i) => (
+                          <View
+                            key={i}
+                            style={[styles.pageDot, i === tourPage && styles.pageDotActive]}
+                          />
+                        ))}
+                      </View>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -758,17 +927,65 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     color: colors.navy900,
   },
+  gmailActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 12,
+  },
   reconnectGmailButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    marginBottom: spacing.md,
   },
   reconnectGmailText: {
     ...typography.caption,
     color: colors.ink600,
+  },
+  tourListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tourCount: {
+    fontSize: 13,
+    color: colors.ink400,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  sortButtonText: {
+    fontSize: 13,
+    color: colors.ink600,
+    fontWeight: '500',
+  },
+  tourPage: {
+    width: Dimensions.get('window').width - 40,
+  },
+  pageIndicator: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  pageDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#d1d5db',
+  },
+  pageDotActive: {
+    backgroundColor: colors.navy900,
+    width: 20,
+    borderRadius: 4,
   },
   emptyTours: {
     alignItems: 'center',
@@ -828,6 +1045,22 @@ const styles = StyleSheet.create({
   tourDate: {
     ...typography.caption,
     color: colors.ink400,
+  },
+  sourceBadgeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  sourceBadge: {
+    backgroundColor: colors.ink50,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+    marginRight: spacing.xs,
+  },
+  sourceBadgeText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.ink600,
   },
 });
 

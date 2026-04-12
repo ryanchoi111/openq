@@ -99,7 +99,7 @@ Built with React Native (Expo), Supabase, and TypeScript.
 | `waitlist_entries` | Queue positions with status tracking (guest + auth users) |
 | `applications` | Housing application distribution records |
 | `agent_gmail_connections` | Gmail OAuth tokens, watch state, history tracking |
-| `zillow_tour_requests` | Parsed Zillow lead data (client info, property address) |
+| `tour_requests` | Parsed tour request data from Zillow, StreetEasy, etc. (client info, property address) |
 
 2 storage buckets: `profile-pictures`, `housing-applications`
 
