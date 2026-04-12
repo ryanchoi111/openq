@@ -142,7 +142,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
         delayLongPress={400}
       >
         <View style={styles.cardHeader}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.clientInfo}>
             <Text style={styles.clientName}>{item.clientName}</Text>
             <Text style={styles.clientEmail}>{item.clientEmail || 'No email'}</Text>
             {item.clientPhone && (
@@ -179,7 +179,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <View style={styles.header}>
         <Ionicons name="home" size={22} color={colors.navy900} />
-        <View style={{ flex: 1, marginLeft: spacing.md }}>
+        <View style={styles.headerInfo}>
           <Text style={styles.address}>{propertyAddress}</Text>
           <Text style={styles.count}>
             {sorted.length} {sorted.length === 1 ? 'request' : 'requests'}
@@ -251,6 +251,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     borderRadius: radii.lg,
   },
+  headerInfo: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
   address: {
     fontSize: 17,
     fontWeight: '700',
@@ -301,6 +305,9 @@ const styles = StyleSheet.create({
   },
   cardDisabled: {
     opacity: 0.4,
+  },
+  clientInfo: {
+    flex: 1,
   },
   cardHeader: {
     flexDirection: 'row',

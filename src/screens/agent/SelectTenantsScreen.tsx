@@ -111,16 +111,11 @@ const SelectTenantsScreen: React.FC<Props> = ({ route, navigation }) => {
           onPress: async () => {
             try {
               setSending(true);
-              const applicationUrl = user.housing_application_url || '';
-
-              if (!applicationUrl) {
-                throw new Error('No housing application found');
-              }
 
               await applicationService.sendApplicationToTenants(
                 eventId,
                 Array.from(selectedIds),
-                applicationUrl,
+                user.housing_application_url!,
                 user.id,
                 user.name,
                 user.email

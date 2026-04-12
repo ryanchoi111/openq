@@ -79,7 +79,7 @@ const TourRequestDetailScreen: React.FC<Props> = ({ route }) => {
         {/* Property Header */}
         <View style={styles.headerCard}>
           <Ionicons name="home" size={24} color="#2563eb" />
-          <View style={{ flex: 1, marginLeft: 12 }}>
+          <View style={styles.headerInfo}>
             <Text style={styles.addressText}>{tourRequest.propertyAddress || 'Unknown Address'}</Text>
             <Text style={styles.dateText}>
               Received {new Date(tourRequest.receivedAt).toLocaleDateString()}
@@ -170,6 +170,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
+  },
+  headerInfo: {
+    flex: 1,
+    marginLeft: 12,
   },
   addressText: {
     fontSize: 18,
