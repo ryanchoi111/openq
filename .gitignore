@@ -54,3 +54,5 @@ supabase/.temp/
 !package-lock.json
 !tsconfig.json
 !eas.json
+*.log
+.gitignore

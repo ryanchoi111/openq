@@ -3,6 +3,7 @@
  */
 
 export * from './gmail';
+export * from './calendar';
 
 // User roles
 export type UserRole = 'agent' | 'tenant' | 'guest';
