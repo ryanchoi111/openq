@@ -21,7 +21,8 @@ import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { SignOutButton } from '../../components/SignOutButton';
 import { profileService } from '../../services/profileService';
-import { getGmailConnectionStatus, getTourRequests, connectGmailAccount, setupGmailWatch, backfillTourRequests } from '../../services/gmailService';
+import { getGmailConnectionStatus, getTourRequests, connectGmailAccount, setupGmailWatch, backfillTourRequests, incrementalSyncTourRequests } from '../../services/gmailService';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../config/supabase';
 import type { TourRequest } from '../../types/gmail';
 import { colors, typography, spacing, radii, getInitials, getAvatarColor } from '../../utils/theme';
@@ -44,6 +45,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [loadingTours, setLoadingTours] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [tourPage, setTourPage] = useState(0);
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const tourListRef = useRef<FlatList>(null);
@@ -146,6 +148,37 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     loadZillowData();
   }, [loadZillowData]);
+
+  // Auto-sync on screen focus (debounced server-side at 30s)
+  useFocusEffect(
+    useCallback(() => {
+      if (!user || user.role !== 'agent' || !gmailConnected) return;
+      incrementalSyncTourRequests(user.id, false).then(async (result) => {
+        if (result.success && result.newCount && result.newCount > 0) {
+          const tours = await getTourRequests(user.id);
+          setTourRequests(tours);
+        }
+      }).catch(() => {});
+    }, [user, gmailConnected])
+  );
+
+  const handleIncrementalSync = async () => {
+    if (!user) return;
+    setRefreshing(true);
+    try {
+      const result = await incrementalSyncTourRequests(user.id, true);
+      if (result.success) {
+        const tours = await getTourRequests(user.id);
+        setTourRequests(tours);
+      } else {
+        Alert.alert('Error', result.error || 'Sync failed');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to refresh tour requests');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleConnectGmail = async () => {
     if (!user) return;
@@ -543,6 +576,20 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               <>
                 <View style={styles.gmailActions}>
                   <TouchableOpacity
+                    style={styles.refreshButton}
+                    onPress={handleIncrementalSync}
+                    disabled={refreshing}
+                  >
+                    {refreshing ? (
+                      <ActivityIndicator size="small" color={colors.navy900} />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh" size={16} color={colors.navy900} />
+                        <Text style={styles.refreshButtonText}>Refresh</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     style={styles.reconnectGmailButton}
                     onPress={handleReconnectGmail}
                     disabled={connectingGmail}
@@ -551,7 +598,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                       <ActivityIndicator size="small" color={colors.ink600} />
                     ) : (
                       <>
-                        <Ionicons name="refresh" size={16} color={colors.ink600} />
+                        <Ionicons name="sync-outline" size={16} color={colors.ink600} />
                         <Text style={styles.reconnectGmailText}>Reconnect</Text>
                       </>
                     )}
@@ -932,6 +979,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
     marginBottom: 12,
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: colors.navy50,
+    borderRadius: radii.sm,
+  },
+  refreshButtonText: {
+    ...typography.caption,
+    color: colors.navy900,
+    fontWeight: '600',
   },
   reconnectGmailButton: {
     flexDirection: 'row',

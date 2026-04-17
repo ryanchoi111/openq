@@ -56,3 +56,4 @@ supabase/.temp/
 !eas.json
 *.log
 .gitignore
+.remember

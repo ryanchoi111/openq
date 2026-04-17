@@ -101,6 +101,9 @@ CREATE TABLE IF NOT EXISTS public.agent_gmail_connections (
   history_id TEXT,
   watch_expiration TIMESTAMPTZ,
   needs_reauth BOOLEAN DEFAULT FALSE,
+  access_token TEXT,
+  access_token_expires_at TIMESTAMPTZ,
+  last_synced_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT agent_gmail_connections_agent_id_key UNIQUE (agent_id)

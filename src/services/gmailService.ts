@@ -174,7 +174,7 @@ export async function setupGmailWatch(agentId: string): Promise<{ success: boole
 export async function getGmailConnectionStatus(agentId: string): Promise<AgentGmailConnection | null> {
   const { data, error } = await supabase
     .from('agent_gmail_connections')
-    .select('*')
+    .select('agent_id, email, history_id, watch_expiration, needs_reauth')
     .eq('agent_id', agentId)
     .single();
 
@@ -183,7 +183,6 @@ export async function getGmailConnectionStatus(agentId: string): Promise<AgentGm
   return {
     agentId: data.agent_id,
     email: data.email,
-    refreshToken: data.refresh_token,
     historyId: data.history_id,
     watchExpiration: data.watch_expiration,
     needsReauth: data.needs_reauth,
@@ -265,6 +264,50 @@ export async function backfillTourRequests(
   } catch (error) {
     console.error('Gmail backfill error:', error);
     return { success: false, error: 'Failed to backfill tour requests' };
+  }
+}
+
+/**
+ * Fast incremental sync — fetches only new emails since last sync using Gmail historyId.
+ * Use for the "Refresh" button and auto-sync on screen focus.
+ * Falls back to backfill if no historyId exists yet.
+ */
+export async function incrementalSyncTourRequests(
+  agentId: string,
+  force = false
+): Promise<{ success: boolean; newCount?: number; needsFullSync?: boolean; skipped?: boolean; error?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/gmail-incremental-sync`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ agentId, force }),
+    });
+
+    const data = await response.json();
+
+    // If server says historyId is missing, fall back to full backfill
+    if (data.needsFullSync) {
+      return backfillTourRequests(agentId);
+    }
+
+    return {
+      success: data.success,
+      newCount: data.newCount,
+      needsFullSync: false,
+      skipped: data.skipped,
+      error: data.error,
+    };
+  } catch (error) {
+    console.error('Incremental sync error:', error);
+    return { success: false, error: 'Failed to sync tour requests' };
   }
 }
 

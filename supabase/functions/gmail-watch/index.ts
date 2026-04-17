@@ -8,19 +8,20 @@
  * Uses the agent's stored refresh token to set up the watch.
  */
 
+import {
+  verifyAgent,
+  jsonResponse,
+  CORS_HEADERS,
+  supabaseHeaders,
+} from '../_shared/gmailSync.ts';
+
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
 const GOOGLE_PROJECT_ID = Deno.env.get('GOOGLE_PROJECT_ID') ?? '';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    });
+    return new Response('ok', { headers: CORS_HEADERS });
   }
 
   if (req.method !== 'POST') {
@@ -31,33 +32,24 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-    // Validate auth — ensure caller is authenticated
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing Authorization header' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'Missing Authorization header' }, 401);
     }
 
     const { agentId } = await req.json();
     if (!agentId) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'agentId is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'agentId is required' }, 400);
     }
+
+    // Verify caller is the agent they claim to be
+    const authError = await verifyAgent(authHeader, agentId, supabaseUrl, supabaseServiceKey);
+    if (authError) return authError;
 
     // Look up agent's Gmail connection
     const connResponse = await fetch(
       `${supabaseUrl}/rest/v1/agent_gmail_connections?agent_id=eq.${agentId}&select=*`,
-      {
-        headers: {
-          'apikey': supabaseServiceKey,
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'Content-Type': 'application/json',
-        },
-      }
+      { headers: supabaseHeaders(supabaseServiceKey) },
     );
 
     const connections = await connResponse.json();
@@ -97,19 +89,11 @@ Deno.serve(async (req: Request) => {
         `${supabaseUrl}/rest/v1/agent_gmail_connections?id=eq.${connection.id}`,
         {
           method: 'PATCH',
-          headers: {
-            'apikey': supabaseServiceKey,
-            'Authorization': `Bearer ${supabaseServiceKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal',
-          },
+          headers: supabaseHeaders(supabaseServiceKey),
           body: JSON.stringify({ needs_reauth: true }),
         }
       );
-      return new Response(
-        JSON.stringify({ success: false, error: 'Token refresh failed, re-auth needed' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: false, error: 'Token refresh failed, re-auth needed' }, 401);
     }
 
     const tokens = await tokenResponse.json();
@@ -144,12 +128,7 @@ Deno.serve(async (req: Request) => {
       `${supabaseUrl}/rest/v1/agent_gmail_connections?id=eq.${connection.id}`,
       {
         method: 'PATCH',
-        headers: {
-          'apikey': supabaseServiceKey,
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        },
+        headers: supabaseHeaders(supabaseServiceKey),
         body: JSON.stringify({
           history_id: watchData.historyId,
           watch_expiration: new Date(parseInt(watchData.expiration)).toISOString(),
@@ -160,22 +139,16 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[Gmail Watch] Watch set for agent ${agentId}, expires: ${watchData.expiration}`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        historyId: watchData.historyId,
-        expiration: watchData.expiration,
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      success: true,
+      historyId: watchData.historyId,
+      expiration: watchData.expiration,
+    });
   } catch (error) {
     console.error('[Gmail Watch] Error:', error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
   }
 });
