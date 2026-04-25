@@ -44,7 +44,7 @@ export interface GmailWatchResponse {
 export interface AgentGmailConnection {
   agentId: string;
   email: string;
-  refreshToken: string;
+  refreshToken?: string;
   historyId: string;
   watchExpiration: string;
   needsReauth: boolean;
