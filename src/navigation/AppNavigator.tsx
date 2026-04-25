@@ -7,8 +7,9 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../contexts/AuthContext';
 import { colors, typography } from '../utils/theme';
@@ -90,6 +91,21 @@ const TenantNavigator = () => {
   );
 };
 
+// Custom agent tab header with safe area insets
+const AgentHeader = ({ options }: { options: { headerTitle?: string | ((props: any) => React.ReactNode); title?: string } }) => {
+  const insets = useSafeAreaInsets();
+  const title = (typeof options.headerTitle === 'string' ? options.headerTitle : options.title) ?? 'OpenQ';
+  return (
+    <View style={{ backgroundColor: colors.white, paddingTop: insets.top }}>
+      <View style={{ height: 44, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontWeight: typography.heading.fontWeight, fontSize: typography.heading.fontSize, color: colors.ink900 }}>
+          {title}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
 // Agent Tab Navigator (Main Screens with Bottom Tabs)
 const AgentTabNavigator = () => {
   return (
@@ -109,22 +125,7 @@ const AgentTabNavigator = () => {
           fontSize: typography.tabLabel.fontSize,
           fontWeight: typography.tabLabel.fontWeight,
         },
-        headerStyle: {
-          backgroundColor: colors.white,
-        },
-        headerShadowVisible: false,
-        headerTitleStyle: {
-          fontWeight: typography.heading.fontWeight,
-          fontSize: typography.heading.fontSize,
-          color: colors.ink900,
-        },
-        headerTitleAlign: 'left',
-        headerLeftContainerStyle: {
-          paddingLeft: 4,
-        },
-        headerTitleContainerStyle: {
-          paddingLeft: 0,
-        },
+        header: ({ options }) => <AgentHeader options={options} />,
       }}
     >
       <AgentTabs.Screen
@@ -142,7 +143,7 @@ const AgentTabNavigator = () => {
         name="Properties"
         component={PropertiesScreen as any}
         options={{
-          headerTitle: 'OpenQ',
+          headerTitle: 'Properties',
           tabBarLabel: 'Listings',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
@@ -153,7 +154,7 @@ const AgentTabNavigator = () => {
         name="EventHistory"
         component={EventHistoryScreen as any}
         options={{
-          headerTitle: 'OpenQ',
+          headerTitle: 'History',
           tabBarLabel: 'PPL',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'people' : 'people-outline'} size={24} color={color} />
@@ -164,7 +165,7 @@ const AgentTabNavigator = () => {
         name="Profile"
         component={ProfileScreen as any}
         options={{
-          headerTitle: 'OpenQ',
+          headerTitle: 'Profile',
           tabBarLabel: 'Me',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />

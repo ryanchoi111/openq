@@ -126,6 +126,19 @@ CREATE TABLE IF NOT EXISTS public.tour_requests (
   CONSTRAINT tour_requests_unique_lead UNIQUE (agent_id, client_email, property_address)
 );
 
+-- Per-property metadata derived from inbound tour requests (status labels, etc.)
+CREATE TABLE IF NOT EXISTS public.tour_request_properties (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  address TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT 'none' CHECK (label IN ('none','available','processing','rented')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (agent_id, address)
+);
+CREATE INDEX IF NOT EXISTS tour_request_properties_agent_idx ON public.tour_request_properties (agent_id);
+CREATE INDEX IF NOT EXISTS tour_request_properties_agent_label_idx ON public.tour_request_properties (agent_id, label);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_properties_agent_id ON public.properties(agent_id);
 CREATE INDEX IF NOT EXISTS idx_events_property_id ON public.open_house_events(property_id);
@@ -254,6 +267,18 @@ CREATE POLICY "Agents can delete own gmail connections" ON public.agent_gmail_co
 -- Tour requests: agents can read own requests
 CREATE POLICY "Agents can read own tour requests" ON public.tour_requests
   FOR SELECT USING (auth.uid() = agent_id);
+
+-- Tour request properties: agents fully manage their own
+ALTER TABLE public.tour_request_properties ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Agents read own tour_request_properties" ON public.tour_request_properties
+  FOR SELECT USING (auth.uid() = agent_id);
+CREATE POLICY "Agents insert own tour_request_properties" ON public.tour_request_properties
+  FOR INSERT WITH CHECK (auth.uid() = agent_id);
+CREATE POLICY "Agents update own tour_request_properties" ON public.tour_request_properties
+  FOR UPDATE USING (auth.uid() = agent_id) WITH CHECK (auth.uid() = agent_id);
+CREATE POLICY "Agents delete own tour_request_properties" ON public.tour_request_properties
+  FOR DELETE USING (auth.uid() = agent_id);
 
 -- Enable Realtime for waitlist updates
 ALTER PUBLICATION supabase_realtime ADD TABLE public.waitlist_entries;

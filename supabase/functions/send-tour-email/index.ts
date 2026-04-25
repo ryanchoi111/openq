@@ -1,3 +1,5 @@
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
 const ALLOWED_ORIGINS = [
@@ -20,11 +22,10 @@ interface TourEmailRequest {
   to: string;
   subject: string;
   emailBody: string;
-  agentName: string;
-  agentEmail: string;
 }
 
-/** Escape HTML entities to prevent injection */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -32,6 +33,13 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function jsonResponse(body: unknown, status: number, origin: string | null) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -46,22 +54,74 @@ Deno.serve(async (req: Request) => {
       throw new Error('RESEND_API_KEY is not set');
     }
 
-    const { to, subject, emailBody, agentName, agentEmail }: TourEmailRequest = await req.json();
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return jsonResponse({ success: false, error: 'Missing Authorization header' }, 401, origin);
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } },
+    );
+
+    const { data: authData, error: authErr } = await supabaseClient.auth.getUser();
+    if (authErr || !authData.user) {
+      return jsonResponse({ success: false, error: 'Invalid session' }, 401, origin);
+    }
+    const callerId = authData.user.id;
+
+    const { data: callerRow, error: callerErr } = await supabaseClient
+      .from('users')
+      .select('name, email, role')
+      .eq('id', callerId)
+      .single();
+    if (callerErr || !callerRow) {
+      return jsonResponse({ success: false, error: 'User not found' }, 403, origin);
+    }
+    if (callerRow.role !== 'agent') {
+      return jsonResponse({ success: false, error: 'Forbidden: agent role required' }, 403, origin);
+    }
+
+    const { to, subject, emailBody }: TourEmailRequest = await req.json();
 
     if (!to || !subject || !emailBody) {
-      throw new Error('Missing required fields: to, subject, emailBody');
+      return jsonResponse(
+        { success: false, error: 'Missing required fields: to, subject, emailBody' },
+        400,
+        origin,
+      );
+    }
+    if (!EMAIL_REGEX.test(to)) {
+      return jsonResponse({ success: false, error: 'Invalid recipient email' }, 400, origin);
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(to)) {
-      throw new Error('Invalid recipient email');
+    const { data: matched, error: matchErr } = await supabaseClient
+      .from('tour_requests')
+      .select('id')
+      .eq('agent_id', callerId)
+      .eq('client_email', to)
+      .limit(1)
+      .maybeSingle();
+    if (matchErr) {
+      console.error('[send-tour-email] tour_requests lookup error:', matchErr);
+      return jsonResponse({ success: false, error: 'Recipient lookup failed' }, 500, origin);
+    }
+    if (!matched) {
+      return jsonResponse(
+        { success: false, error: 'Recipient is not associated with any of your tour requests' },
+        403,
+        origin,
+      );
     }
 
-    const senderName = agentName || 'OpenQ';
+    const senderName = callerRow.name || 'OpenQ';
+    const replyEmail = EMAIL_REGEX.test(callerRow.email ?? '') ? callerRow.email : 'noreply@openqapp.xyz';
+
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
         ${escapeHtml(emailBody).replace(/\n/g, '<br>')}
-        ${agentEmail ? `<br><br><p style="font-size: 12px; color: #666;">Reply to: <a href="mailto:${escapeHtml(agentEmail)}" style="color: #2563eb;">${escapeHtml(agentEmail)}</a></p>` : ''}
+        <br><br><p style="font-size: 12px; color: #666;">Reply to: <a href="mailto:${encodeURIComponent(replyEmail)}" style="color: #2563eb;">${escapeHtml(replyEmail)}</a></p>
       </div>
     `;
 
@@ -74,7 +134,7 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         from: `${senderName} <noreply@openqapp.xyz>`,
         to: [to],
-        reply_to: agentEmail || 'noreply@openqapp.xyz',
+        reply_to: replyEmail,
         subject,
         html: htmlContent,
       }),
@@ -94,21 +154,16 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await response.json();
-    return new Response(
-      JSON.stringify({ success: true, messageId: data.id }),
-      { headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) } }
-    );
+    return jsonResponse({ success: true, messageId: data.id }, 200, origin);
   } catch (error) {
     console.error('[send-tour-email] Error:', error);
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-      }),
-      {
-        headers: { 'Content-Type': 'application/json', ...getCorsHeaders(origin) },
-        status: 500,
-      }
+      },
+      500,
+      origin,
     );
   }
 });

@@ -21,11 +21,12 @@ import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { SignOutButton } from '../../components/SignOutButton';
 import { profileService } from '../../services/profileService';
-import { getGmailConnectionStatus, getTourRequests, connectGmailAccount, setupGmailWatch, backfillTourRequests, incrementalSyncTourRequests } from '../../services/gmailService';
+import { getGmailConnectionStatus, getTourRequests, connectGmailAccount, setupGmailWatch, backfillTourRequests, incrementalSyncTourRequests, setPropertyLabel } from '../../services/gmailService';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../config/supabase';
-import type { TourRequest } from '../../types/gmail';
-import { colors, typography, spacing, radii, getInitials, getAvatarColor } from '../../utils/theme';
+import type { TourRequest, PropertyLabel } from '../../types/gmail';
+import { colors, typography, spacing, radii, getInitials, getAvatarColor, labelColor, labelTint } from '../../utils/theme';
+import { PropertyLabelPicker } from '../../components/PropertyLabelPicker';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Profile'>;
 
@@ -34,6 +35,7 @@ interface PropertyGroup {
     requests: TourRequest[];
     mostRecent: TourRequest;
     sources: ('zillow' | 'streeteasy')[];
+    label: PropertyLabel;
 }
 
 const ProfileScreen: React.FC<Props> = ({ navigation }) => {
@@ -48,6 +50,8 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [tourPage, setTourPage] = useState(0);
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
+  const [labelFilter, setLabelFilter] = useState<PropertyLabel | 'all'>('all');
+  const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
   const tourListRef = useRef<FlatList>(null);
   const [calLink, setCalLink] = useState((user && 'cal_link' in user ? user.cal_link : '') || '');
   const [savingCalLink, setSavingCalLink] = useState(false);
@@ -78,6 +82,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         requests: sorted,
         mostRecent: sorted[0],
         sources: Array.from(sourceSet),
+        label: sorted[0]?.label ?? 'none',
       });
     }
     return groups;
@@ -92,15 +97,23 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     });
   }, [propertyGroups, sortNewestFirst]);
 
-  const totalPages = Math.ceil(sortedGroups.length / PAGE_SIZE);
+  const filteredGroups = useMemo(
+    () =>
+      labelFilter === 'all'
+        ? sortedGroups
+        : sortedGroups.filter((g) => g.label === labelFilter),
+    [sortedGroups, labelFilter],
+  );
+
+  const totalPages = Math.ceil(filteredGroups.length / PAGE_SIZE);
 
   const groupPages = useMemo(() => {
     const pages: PropertyGroup[][] = [];
-    for (let i = 0; i < sortedGroups.length; i += PAGE_SIZE) {
-      pages.push(sortedGroups.slice(i, i + PAGE_SIZE));
+    for (let i = 0; i < filteredGroups.length; i += PAGE_SIZE) {
+      pages.push(filteredGroups.slice(i, i + PAGE_SIZE));
     }
     return pages;
-  }, [sortedGroups]);
+  }, [filteredGroups]);
 
   const onTourPageChange = useCallback((e: any) => {
     const pageIndex = Math.round(e.nativeEvent.contentOffset.x / e.nativeEvent.layoutMeasurement.width);
@@ -128,7 +141,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const loadZillowData = useCallback(async () => {
+  const loadTourData = useCallback(async () => {
     if (!user || user.role !== 'agent') return;
     setLoadingTours(true);
     try {
@@ -139,15 +152,15 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         setTourRequests(tours);
       }
     } catch (err) {
-      console.error('Error loading Zillow data:', err);
+      console.error('Error loading tour data:', err);
     } finally {
       setLoadingTours(false);
     }
   }, [user]);
 
   useEffect(() => {
-    loadZillowData();
-  }, [loadZillowData]);
+    loadTourData();
+  }, [loadTourData]);
 
   // Auto-sync on screen focus (debounced server-side at 30s)
   useFocusEffect(
@@ -187,7 +200,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       const result = await connectGmailAccount(user.id);
       if (result.success) {
         Alert.alert('Success', 'Gmail connected');
-        await loadZillowData();
+        await loadTourData();
       } else {
         Alert.alert('Error', result.error || 'Failed to connect Gmail');
       }
@@ -205,7 +218,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       const result = await backfillTourRequests(user.id);
       if (result.success) {
         Alert.alert('Backfill Complete', `Found ${result.tourRequestsFound || 0} tour requests`);
-        await loadZillowData();
+        await loadTourData();
       } else {
         Alert.alert('Error', result.error || 'Backfill failed');
       }
@@ -223,7 +236,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       const result = await setupGmailWatch(user.id);
       if (result.success) {
         Alert.alert('Success', 'Gmail watch renewed');
-        await loadZillowData();
+        await loadTourData();
       } else {
         Alert.alert('Error', result.error || 'Failed to renew Gmail watch');
       }
@@ -630,10 +643,48 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                 ) : (
                   <>
+                    {/* Label filter chips */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.filterChipRow}
+                    >
+                      {(['all', 'available', 'processing', 'rented', 'none'] as const).map((f) => {
+                        const selected = labelFilter === f;
+                        const swatch = f === 'all' ? colors.navy900 : labelColor(f);
+                        return (
+                          <TouchableOpacity
+                            key={f}
+                            onPress={() => {
+                              setLabelFilter(f);
+                              setTourPage(0);
+                              tourListRef.current?.scrollToOffset({ offset: 0, animated: false });
+                            }}
+                            style={[
+                              styles.filterChip,
+                              selected && { backgroundColor: swatch, borderColor: swatch },
+                            ]}
+                          >
+                            {f !== 'all' && (
+                              <View style={[styles.filterChipDot, { backgroundColor: swatch }]} />
+                            )}
+                            <Text
+                              style={[
+                                styles.filterChipText,
+                                selected && { color: colors.white },
+                              ]}
+                            >
+                              {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
                     {/* Sort toggle + count */}
                     <View style={styles.tourListHeader}>
                       <Text style={styles.tourCount}>
-                        {sortedGroups.length} {sortedGroups.length === 1 ? 'property' : 'properties'} ({tourRequests.length} requests)
+                        {filteredGroups.length} {filteredGroups.length === 1 ? 'property' : 'properties'} ({tourRequests.length} requests)
                       </Text>
                       <TouchableOpacity
                         style={styles.sortButton}
@@ -665,22 +716,36 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                       onMomentumScrollEnd={onTourPageChange}
                       renderItem={({ item: page }) => (
                         <View style={styles.tourPage}>
-                          {page.map((group) => (
+                          {page.map((group) => {
+                            const { bg, fg } = labelTint(group.label);
+                            return (
                             <TouchableOpacity
                               key={group.propertyAddress}
-                              style={styles.tourCard}
+                              style={[
+                                styles.tourCard,
+                                { borderLeftWidth: 4, borderLeftColor: labelColor(group.label) },
+                              ]}
                               onPress={() =>
                                 navigation.navigate('PropertyTourRequests', {
                                   propertyAddress: group.propertyAddress,
                                   tourRequests: group.requests,
                                 })
                               }
+                              onLongPress={() => setPickerOpenFor(group.propertyAddress)}
+                              delayLongPress={400}
                             >
                               <View style={styles.tourHeader}>
                                 <Ionicons name="home-outline" size={18} color={colors.navy900} />
                                 <Text style={styles.tourAddress} numberOfLines={2}>
                                   {group.propertyAddress}
                                 </Text>
+                                {group.label !== 'none' && (
+                                  <View style={[styles.labelBadge, { backgroundColor: bg }]}>
+                                    <Text style={[styles.labelBadgeText, { color: fg }]}>
+                                      {group.label.charAt(0).toUpperCase() + group.label.slice(1)}
+                                    </Text>
+                                  </View>
+                                )}
                                 <Ionicons name="chevron-forward" size={18} color={colors.ink400} />
                               </View>
                               <View style={styles.tourDetails}>
@@ -701,7 +766,8 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                                 ))}
                               </View>
                             </TouchableOpacity>
-                          ))}
+                            );
+                          })}
                         </View>
                       )}
                     />
@@ -740,6 +806,30 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.deleteButtonText}>Delete Account</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <PropertyLabelPicker
+        visible={!!pickerOpenFor}
+        propertyAddress={pickerOpenFor ?? ''}
+        currentLabel={
+          pickerOpenFor
+            ? (sortedGroups.find((g) => g.propertyAddress === pickerOpenFor)?.label ?? 'none')
+            : 'none'
+        }
+        onSelect={async (label) => {
+          if (!user || !pickerOpenFor) return;
+          const addr = pickerOpenFor;
+          setPickerOpenFor(null);
+          setTourRequests((prev) =>
+            prev.map((r) => (r.propertyAddress === addr ? { ...r, label } : r)),
+          );
+          const { error } = await setPropertyLabel(user.id, addr, label);
+          if (error) {
+            Alert.alert('Error', 'Failed to save label');
+            loadTourData();
+          }
+        }}
+        onClose={() => setPickerOpenFor(null)}
+      />
     </SafeAreaView>
   );
 };
@@ -1005,6 +1095,41 @@ const styles = StyleSheet.create({
   reconnectGmailText: {
     ...typography.caption,
     color: colors.ink600,
+  },
+  filterChipRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingBottom: spacing.sm,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.ink200,
+    backgroundColor: colors.white,
+  },
+  filterChipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  filterChipText: {
+    ...typography.small,
+    color: colors.ink600,
+  },
+  labelBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+    marginRight: spacing.xs,
+  },
+  labelBadgeText: {
+    ...typography.small,
+    fontSize: 11,
   },
   tourListHeader: {
     flexDirection: 'row',

@@ -2,6 +2,8 @@
  * Gmail monitoring & tour request email detection types (Zillow, StreetEasy)
  */
 
+export type PropertyLabel = 'none' | 'available' | 'processing' | 'rented';
+
 /** Parsed tour request data (Zillow or StreetEasy) */
 export interface TourRequest {
   clientName: string;
@@ -13,6 +15,7 @@ export interface TourRequest {
   gmailMessageId: string;
   agentEmail: string;
   source?: 'zillow' | 'streeteasy';
+  label: PropertyLabel;
 }
 
 /** Gmail Pub/Sub push notification payload */

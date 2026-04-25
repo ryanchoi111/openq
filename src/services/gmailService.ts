@@ -9,7 +9,7 @@ import { supabase, supabaseUrl } from '../config/supabase';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
-import type { TourRequest, AgentGmailConnection } from '../types/gmail';
+import type { TourRequest, AgentGmailConnection, PropertyLabel } from '../types/gmail';
 
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '';
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '';
@@ -205,21 +205,36 @@ export async function disconnectGmailAccount(agentId: string): Promise<{ success
 }
 
 /**
- * Fetch tour requests for an agent.
+ * Fetch tour requests for an agent. Each row is decorated with the
+ * per-property label looked up from tour_request_properties.
  */
 export async function getTourRequests(agentId: string): Promise<TourRequest[]> {
-  const { data, error } = await supabase
-    .from('tour_requests')
-    .select('*')
-    .eq('agent_id', agentId)
-    .order('received_at', { ascending: false });
+  const [requestsRes, propsRes] = await Promise.all([
+    supabase
+      .from('tour_requests')
+      .select('*')
+      .eq('agent_id', agentId)
+      .order('received_at', { ascending: false }),
+    supabase
+      .from('tour_request_properties')
+      .select('address,label')
+      .eq('agent_id', agentId),
+  ]);
 
-  if (error) {
-    console.error('Error fetching tour requests:', error);
+  if (requestsRes.error) {
+    console.error('Error fetching tour requests:', requestsRes.error);
     return [];
   }
+  if (propsRes.error) {
+    console.error('Error fetching tour_request_properties:', propsRes.error);
+  }
 
-  return (data || []).map((row: any) => ({
+  const labelByAddress = new Map<string, PropertyLabel>();
+  for (const p of propsRes.data ?? []) {
+    labelByAddress.set(p.address, (p.label ?? 'none') as PropertyLabel);
+  }
+
+  return (requestsRes.data || []).map((row: any) => ({
     clientName: row.client_name,
     clientEmail: row.client_email,
     clientPhone: row.client_phone,
@@ -229,7 +244,26 @@ export async function getTourRequests(agentId: string): Promise<TourRequest[]> {
     gmailMessageId: row.gmail_message_id,
     agentEmail: row.agent_email || '',
     source: row.source,
+    label: labelByAddress.get(row.property_address) ?? 'none',
   }));
+}
+
+/**
+ * Set a property's label. Upserts a row in tour_request_properties so the
+ * label persists even if no tour_requests row exists yet for the address.
+ */
+export async function setPropertyLabel(
+  agentId: string,
+  propertyAddress: string,
+  label: PropertyLabel,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('tour_request_properties')
+    .upsert(
+      { agent_id: agentId, address: propertyAddress, label },
+      { onConflict: 'agent_id,address' },
+    );
+  return { error: error?.message ?? null };
 }
 
 /**

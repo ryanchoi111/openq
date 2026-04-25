@@ -469,6 +469,9 @@ export function parseMessageToTourRecord(
 
 /**
  * Upsert tour request records into Supabase, ignoring duplicates.
+ * Also upserts the distinct (agent_id, address) pairs into tour_request_properties
+ * so each property has a row to hang a label on. Existing rows are preserved
+ * (ignore-duplicates) so labels are never overwritten.
  */
 export async function upsertTourRequests(
   records: TourRecord[],
@@ -477,6 +480,35 @@ export async function upsertTourRequests(
 ): Promise<{ error: string | null }> {
   if (records.length === 0) return { error: null };
 
+  // 1) Upsert per-property rows first (preserves existing labels via ignore-duplicates).
+  const seen = new Set<string>();
+  const propertyRows: { agent_id: string; address: string }[] = [];
+  for (const r of records) {
+    if (!r.property_address) continue;
+    const key = `${r.agent_id}|${r.property_address}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    propertyRows.push({ agent_id: r.agent_id, address: r.property_address });
+  }
+
+  if (propertyRows.length > 0) {
+    const propRes = await fetch(`${supabaseUrl}/rest/v1/tour_request_properties`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseServiceKey,
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal,resolution=ignore-duplicates',
+      },
+      body: JSON.stringify(propertyRows),
+    });
+    if (!propRes.ok) {
+      const text = await propRes.text();
+      return { error: `tour_request_properties upsert failed: ${text}` };
+    }
+  }
+
+  // 2) Insert tour_requests rows (ignore duplicates by gmail_message_id).
   const res = await fetch(`${supabaseUrl}/rest/v1/tour_requests`, {
     method: 'POST',
     headers: {

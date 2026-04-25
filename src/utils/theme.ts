@@ -1,6 +1,7 @@
 /**
  * Shared design tokens
  */
+import type { PropertyLabel } from '../types/gmail';
 
 export const colors = {
   white: '#ffffff',
@@ -14,10 +15,32 @@ export const colors = {
   ink600: '#64748b',
   ink900: '#1e293b',
   coral500: '#f97066',
+  coral50: '#fef2f2',
   green50: '#ecfdf5',
   green500: '#22c55e',
   greenDark: '#15803d',
+  amber500: '#eab308',
+  amber50: '#fefce8',
+  amberDark: '#a16207',
 };
+
+export function labelColor(l: PropertyLabel): string {
+  switch (l) {
+    case 'available': return colors.green500;
+    case 'processing': return colors.amber500;
+    case 'rented': return colors.coral500;
+    case 'none': return colors.ink200;
+  }
+}
+
+export function labelTint(l: PropertyLabel): { bg: string; fg: string } {
+  switch (l) {
+    case 'available': return { bg: colors.green50, fg: colors.greenDark };
+    case 'processing': return { bg: colors.amber50, fg: colors.amberDark };
+    case 'rented': return { bg: colors.coral50, fg: colors.coral500 };
+    case 'none': return { bg: colors.ink50, fg: colors.ink600 };
+  }
+}
 
 export const typography = {
   heading: { fontSize: 20 as const, fontWeight: '600' as const },
