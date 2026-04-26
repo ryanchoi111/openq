@@ -20,6 +20,12 @@ import { supabase } from '../../config/supabase';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'PropertyTourRequests'>;
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function hasValidClientEmail(tourRequest: TourRequest): boolean {
+  return EMAIL_PATTERN.test(tourRequest.clientEmail.trim());
+}
+
 const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
   const { propertyAddress, tourRequests } = route.params;
   const { user } = useAuth();
@@ -33,7 +39,8 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
     (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
   );
 
-  const selectableRequests = sorted.filter((r) => r.clientEmail);
+  const selectableRequests = sorted.filter(hasValidClientEmail);
+  const selectableRequestIds = selectableRequests.map((r) => r.gmailMessageId);
 
   const toggleSelection = (id: string) => {
     const next = new Set(selectedIds);
@@ -45,15 +52,19 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
     setSelectedIds(next);
   };
 
-  const handleLongPress = (item: TourRequest) => {
-    if (!item.clientEmail) return;
+  const enterSelectionMode = (initialIds: string[] = selectableRequestIds): void => {
     setSelectionMode(true);
-    setSelectedIds(new Set([item.gmailMessageId]));
+    setSelectedIds(new Set(initialIds));
+  };
+
+  const handleLongPress = (item: TourRequest) => {
+    if (!hasValidClientEmail(item)) return;
+    enterSelectionMode([item.gmailMessageId]);
   };
 
   const handlePress = (item: TourRequest) => {
     if (selectionMode) {
-      if (!item.clientEmail) return;
+      if (!hasValidClientEmail(item)) return;
       toggleSelection(item.gmailMessageId);
     } else {
       navigation.navigate('TourRequestDetail', { tourRequest: item });
@@ -69,7 +80,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
     if (selectedIds.size === selectableRequests.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(selectableRequests.map((r) => r.gmailMessageId)));
+      setSelectedIds(new Set(selectableRequestIds));
     }
   };
 
@@ -78,8 +89,8 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
     if (count === 0) return;
 
     Alert.alert(
-      'Send Tour Link',
-      `Send scheduling link to ${count} ${count === 1 ? 'person' : 'people'}?`,
+      'Send Booking Link',
+      `Send booking link to ${count} ${count === 1 ? 'person' : 'people'}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Send', onPress: sendToSelected },
@@ -94,7 +105,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
     let successCount = 0;
     let failCount = 0;
 
-    const selected = sorted.filter((r) => selectedIds.has(r.gmailMessageId) && r.clientEmail);
+    const selected = sorted.filter((r) => selectedIds.has(r.gmailMessageId) && hasValidClientEmail(r));
 
     for (const req of selected) {
       const subject = `Tour Request: ${propertyAddress || 'Property'}`;
@@ -128,7 +139,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const renderItem = ({ item }: { item: TourRequest }) => {
     const isSelected = selectedIds.has(item.gmailMessageId);
-    const hasEmail = !!item.clientEmail;
+    const hasEmail = hasValidClientEmail(item);
 
     return (
       <TouchableOpacity
@@ -144,7 +155,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.cardHeader}>
           <View style={styles.clientInfo}>
             <Text style={styles.clientName}>{item.clientName}</Text>
-            <Text style={styles.clientEmail}>{item.clientEmail || 'No email'}</Text>
+            <Text style={styles.clientEmail}>{item.clientEmail.trim() || 'No email'}</Text>
             {item.clientPhone && (
               <Text style={styles.clientPhone}>{item.clientPhone}</Text>
             )}
@@ -178,13 +189,23 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <View style={styles.header}>
-        <Ionicons name="home" size={22} color={colors.navy900} />
-        <View style={styles.headerInfo}>
-          <Text style={styles.address}>{propertyAddress}</Text>
-          <Text style={styles.count}>
-            {sorted.length} {sorted.length === 1 ? 'request' : 'requests'}
-          </Text>
+        <View style={styles.headerTop}>
+          <Ionicons name="home" size={22} color={colors.navy900} />
+          <View style={styles.headerInfo}>
+            <Text style={styles.address}>{propertyAddress}</Text>
+            <Text style={styles.count}>
+              {sorted.length} {sorted.length === 1 ? 'request' : 'requests'}
+            </Text>
+          </View>
         </View>
+        {!selectionMode && selectableRequests.length > 0 && (
+          <TouchableOpacity style={styles.headerAction} onPress={() => enterSelectionMode()}>
+            <Ionicons name="send-outline" size={15} color="#2563eb" />
+            <Text style={styles.headerActionText}>
+              Send Booking Link{selectableRequests.length === 1 ? '' : 's'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {selectionMode && (
@@ -226,7 +247,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
               <>
                 <Ionicons name="send" size={18} color="#fff" />
                 <Text style={styles.sendButtonText}>
-                  Send Tour Link ({selectedIds.size})
+                  Send Booking Link ({selectedIds.size})
                 </Text>
               </>
             )}
@@ -243,17 +264,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.navy50,
     padding: spacing.lg,
     marginHorizontal: spacing.xl,
     marginTop: spacing.lg,
     borderRadius: radii.lg,
   },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   headerInfo: {
     flex: 1,
     marginLeft: spacing.md,
+  },
+  headerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.ink200,
+    marginTop: spacing.md,
+    alignSelf: 'flex-start',
+  },
+  headerActionText: {
+    fontSize: 13,
+    color: '#2563eb',
+    fontWeight: '600',
   },
   address: {
     fontSize: 17,
