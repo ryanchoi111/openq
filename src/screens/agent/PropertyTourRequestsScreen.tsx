@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import type { AgentUser } from '../../types';
 import { colors, typography, spacing, radii } from '../../utils/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../config/supabase';
+import { bookingService, buildBookingUrl } from '../../services/bookingService';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'PropertyTourRequests'>;
 
@@ -30,7 +31,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
   const { propertyAddress, tourRequests } = route.params;
   const { user } = useAuth();
   const agent = user as AgentUser;
-  const calLink = agent?.cal_link || '';
+  const [bookingSlug, setBookingSlug] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
@@ -41,6 +42,23 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const selectableRequests = sorted.filter(hasValidClientEmail);
   const selectableRequestIds = selectableRequests.map((r) => r.gmailMessageId);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadBookingProfile() {
+      if (!agent?.id) return;
+      try {
+        const settings = await bookingService.getSettings(agent.id);
+        if (mounted) setBookingSlug(settings.profile?.slug ?? '');
+      } catch (err) {
+        console.error('Failed to load booking profile:', err);
+      }
+    }
+    loadBookingProfile();
+    return () => {
+      mounted = false;
+    };
+  }, [agent?.id]);
 
   const toggleSelection = (id: string) => {
     const next = new Set(selectedIds);
@@ -87,6 +105,10 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
   const handleSendSelected = () => {
     const count = selectedIds.size;
     if (count === 0) return;
+    if (!bookingSlug) {
+      Alert.alert('Booking Settings Required', 'Set up your OpenQ booking slug in Profile > Booking Settings before sending booking links.');
+      return;
+    }
 
     Alert.alert(
       'Send Booking Link',
@@ -110,7 +132,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
     for (const req of selected) {
       const subject = `Tour Request: ${propertyAddress || 'Property'}`;
       let body = `Hi ${req.clientName},\n\nThank you for your interest in ${propertyAddress}!`;
-      if (calLink) body += ` Book a tour using this link: ${calLink}`;
+      if (bookingSlug) body += ` Book a tour using this link: ${buildBookingUrl(bookingSlug, req.id)}`;
       body += `\n\nBest regards,\n${agentName}`;
 
       try {

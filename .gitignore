@@ -54,6 +54,8 @@ supabase/.temp/
 !package-lock.json
 !tsconfig.json
 !eas.json
+!vercel.json
 *.log
 .gitignore
 .remember
+.vercel

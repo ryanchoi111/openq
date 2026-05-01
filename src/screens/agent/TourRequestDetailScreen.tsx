@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,13 +17,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../config/supabase';
 import type { AgentUser } from '../../types';
 import type { TourRequest } from '../../types/gmail';
+import { bookingService, buildBookingUrl } from '../../services/bookingService';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'TourRequestDetail'>;
 
-function buildDefaultBody(calLink: string, tourRequest: TourRequest, user: AgentUser | null): string {
+function buildDefaultBody(bookingLink: string, tourRequest: TourRequest, user: AgentUser | null): string {
   const address = tourRequest.propertyAddress || 'the property';
   let body = `Hi ${tourRequest.clientName},\n\nThank you for your interest in ${address}!`;
-  if (calLink) body += ` Book a tour using this link: ${calLink}`;
+  if (bookingLink) body += ` Book a tour using this link: ${bookingLink}`;
   body += `\n\nBest regards,\n${user?.name || 'Agent'}`;
   return body;
 }
@@ -32,12 +33,32 @@ const TourRequestDetailScreen: React.FC<Props> = ({ route }) => {
   const { tourRequest } = route.params;
   const { user } = useAuth();
   const agent = user as AgentUser;
-  const calLink = agent?.cal_link || '';
-  const [emailBody, setEmailBody] = useState(() => buildDefaultBody(calLink, tourRequest, agent));
+  const [bookingLink, setBookingLink] = useState('');
+  const [emailBody, setEmailBody] = useState(() => buildDefaultBody('', tourRequest, agent));
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
   const subject = `Tour Request: ${tourRequest.propertyAddress || 'Property'}`;
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadBookingLink() {
+      if (!agent?.id) return;
+      try {
+        const settings = await bookingService.getSettings(agent.id);
+        if (!mounted || !settings.profile?.slug) return;
+        const link = buildBookingUrl(settings.profile.slug, tourRequest.id);
+        setBookingLink(link);
+        setEmailBody(buildDefaultBody(link, tourRequest, agent));
+      } catch (err) {
+        console.error('Failed to load booking profile:', err);
+      }
+    }
+    loadBookingLink();
+    return () => {
+      mounted = false;
+    };
+  }, [agent?.id, tourRequest, agent]);
 
   const handleSend = async () => {
     if (!tourRequest.clientEmail) {

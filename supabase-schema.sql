@@ -139,6 +139,75 @@ CREATE TABLE IF NOT EXISTS public.tour_request_properties (
 CREATE INDEX IF NOT EXISTS tour_request_properties_agent_idx ON public.tour_request_properties (agent_id);
 CREATE INDEX IF NOT EXISTS tour_request_properties_agent_label_idx ON public.tour_request_properties (agent_id, label);
 
+-- Agent-level public booking settings
+CREATE TABLE IF NOT EXISTS public.agent_booking_profiles (
+  agent_id UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+  slug TEXT NOT NULL UNIQUE,
+  booking_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  timezone TEXT NOT NULL DEFAULT 'America/New_York',
+  default_booking_horizon_days INTEGER NOT NULL DEFAULT 14 CHECK (default_booking_horizon_days BETWEEN 1 AND 120),
+  minimum_notice_minutes INTEGER NOT NULL DEFAULT 240 CHECK (minimum_notice_minutes >= 0),
+  slot_increment_minutes INTEGER NOT NULL DEFAULT 30 CHECK (slot_increment_minutes IN (5, 10, 15, 20, 30, 60)),
+  working_hours JSONB NOT NULL DEFAULT '[]'::jsonb,
+  default_buffer_before_minutes INTEGER NOT NULL DEFAULT 0 CHECK (default_buffer_before_minutes >= 0),
+  default_buffer_after_minutes INTEGER NOT NULL DEFAULT 15 CHECK (default_buffer_after_minutes >= 0),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.booking_event_types (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agent_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+  duration_minutes INTEGER NOT NULL CHECK (duration_minutes BETWEEN 5 AND 240),
+  buffer_before_minutes INTEGER DEFAULT 0 CHECK (buffer_before_minutes >= 0),
+  buffer_after_minutes INTEGER DEFAULT 15 CHECK (buffer_after_minutes >= 0),
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.booking_questions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agent_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  prompt TEXT NOT NULL,
+  question_type TEXT NOT NULL CHECK (question_type IN ('text', 'textarea', 'number', 'date', 'boolean', 'single_select')),
+  required BOOLEAN NOT NULL DEFAULT FALSE,
+  options JSONB,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.bookings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agent_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  tour_request_id UUID REFERENCES public.tour_requests(id) ON DELETE SET NULL,
+  event_type_id UUID REFERENCES public.booking_event_types(id) ON DELETE SET NULL,
+  prospect_name TEXT NOT NULL,
+  prospect_email TEXT NOT NULL,
+  prospect_phone TEXT,
+  property_address TEXT,
+  source TEXT,
+  starts_at TIMESTAMPTZ NOT NULL,
+  ends_at TIMESTAMPTZ NOT NULL,
+  timezone TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'cancelled', 'failed')),
+  google_calendar_event_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.booking_question_responses (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  booking_id UUID NOT NULL REFERENCES public.bookings(id) ON DELETE CASCADE,
+  question_id UUID REFERENCES public.booking_questions(id) ON DELETE SET NULL,
+  answer JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_properties_agent_id ON public.properties(agent_id);
 CREATE INDEX IF NOT EXISTS idx_events_property_id ON public.open_house_events(property_id);
@@ -157,6 +226,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_waitlist_unique_position
 CREATE INDEX IF NOT EXISTS idx_gmail_connections_agent_id ON public.agent_gmail_connections(agent_id);
 CREATE INDEX IF NOT EXISTS idx_gmail_connections_email ON public.agent_gmail_connections(email);
 CREATE INDEX IF NOT EXISTS idx_tour_requests_agent_id ON public.tour_requests(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_booking_profiles_slug ON public.agent_booking_profiles(slug);
+CREATE INDEX IF NOT EXISTS idx_booking_event_types_agent_id ON public.booking_event_types(agent_id);
+CREATE INDEX IF NOT EXISTS idx_booking_questions_agent_id ON public.booking_questions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_agent_id ON public.bookings(agent_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_tour_request_id ON public.bookings(tour_request_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_starts_at ON public.bookings(starts_at);
 
 -- Enable Row Level Security
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -166,6 +241,11 @@ ALTER TABLE public.waitlist_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_gmail_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tour_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_booking_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.booking_event_types ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.booking_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.booking_question_responses ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 
@@ -280,6 +360,58 @@ CREATE POLICY "Agents update own tour_request_properties" ON public.tour_request
 CREATE POLICY "Agents delete own tour_request_properties" ON public.tour_request_properties
   FOR DELETE USING (auth.uid() = agent_id);
 
+-- Booking configuration: public can read enabled profiles/event types/questions,
+-- agents can manage their own settings.
+CREATE POLICY "Public can read enabled booking profiles" ON public.agent_booking_profiles
+  FOR SELECT USING (booking_enabled = TRUE OR auth.uid() = agent_id);
+CREATE POLICY "Agents insert own booking profiles" ON public.agent_booking_profiles
+  FOR INSERT WITH CHECK (auth.uid() = agent_id);
+CREATE POLICY "Agents update own booking profiles" ON public.agent_booking_profiles
+  FOR UPDATE USING (auth.uid() = agent_id) WITH CHECK (auth.uid() = agent_id);
+
+CREATE POLICY "Public can read enabled booking event types" ON public.booking_event_types
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.agent_booking_profiles
+      WHERE agent_id = booking_event_types.agent_id
+        AND (booking_enabled = TRUE OR auth.uid() = booking_event_types.agent_id)
+    )
+  );
+CREATE POLICY "Agents insert own booking event types" ON public.booking_event_types
+  FOR INSERT WITH CHECK (auth.uid() = agent_id);
+CREATE POLICY "Agents update own booking event types" ON public.booking_event_types
+  FOR UPDATE USING (auth.uid() = agent_id) WITH CHECK (auth.uid() = agent_id);
+CREATE POLICY "Agents delete own booking event types" ON public.booking_event_types
+  FOR DELETE USING (auth.uid() = agent_id);
+
+CREATE POLICY "Public can read enabled booking questions" ON public.booking_questions
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.agent_booking_profiles
+      WHERE agent_id = booking_questions.agent_id
+        AND (booking_enabled = TRUE OR auth.uid() = booking_questions.agent_id)
+    )
+  );
+CREATE POLICY "Agents insert own booking questions" ON public.booking_questions
+  FOR INSERT WITH CHECK (auth.uid() = agent_id);
+CREATE POLICY "Agents update own booking questions" ON public.booking_questions
+  FOR UPDATE USING (auth.uid() = agent_id) WITH CHECK (auth.uid() = agent_id);
+CREATE POLICY "Agents delete own booking questions" ON public.booking_questions
+  FOR DELETE USING (auth.uid() = agent_id);
+
+CREATE POLICY "Agents can read own bookings" ON public.bookings
+  FOR SELECT USING (auth.uid() = agent_id);
+CREATE POLICY "Agents can update own bookings" ON public.bookings
+  FOR UPDATE USING (auth.uid() = agent_id) WITH CHECK (auth.uid() = agent_id);
+
+CREATE POLICY "Agents can read own booking responses" ON public.booking_question_responses
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.bookings
+      WHERE id = booking_id AND agent_id = auth.uid()
+    )
+  );
+
 -- Enable Realtime for waitlist updates
 ALTER PUBLICATION supabase_realtime ADD TABLE public.waitlist_entries;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.open_house_events;
@@ -300,6 +432,18 @@ CREATE TRIGGER update_properties_updated_at BEFORE UPDATE ON public.properties
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_events_updated_at BEFORE UPDATE ON public.open_house_events
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_agent_booking_profiles_updated_at BEFORE UPDATE ON public.agent_booking_profiles
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_booking_event_types_updated_at BEFORE UPDATE ON public.booking_event_types
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_booking_questions_updated_at BEFORE UPDATE ON public.booking_questions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_bookings_updated_at BEFORE UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to automatically reorder waitlist positions when entry is removed

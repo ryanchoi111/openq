@@ -15,7 +15,7 @@ const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '';
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '';
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/calendar.events.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
 ];
 
 const IOS_REVERSED_CLIENT_ID = GOOGLE_IOS_CLIENT_ID.split('.').reverse().join('.');
@@ -235,6 +235,7 @@ export async function getTourRequests(agentId: string): Promise<TourRequest[]> {
   }
 
   return (requestsRes.data || []).map((row: any) => ({
+    id: row.id,
     clientName: row.client_name,
     clientEmail: row.client_email,
     clientPhone: row.client_phone,

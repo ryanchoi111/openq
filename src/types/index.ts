@@ -4,6 +4,7 @@
 
 export * from './gmail';
 export * from './calendar';
+export * from './booking';
 
 // User roles
 export type UserRole = 'agent' | 'tenant' | 'guest';

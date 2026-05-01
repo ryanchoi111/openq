@@ -23,7 +23,6 @@ import { SignOutButton } from '../../components/SignOutButton';
 import { profileService } from '../../services/profileService';
 import { getGmailConnectionStatus, getTourRequests, connectGmailAccount, setupGmailWatch, backfillTourRequests, incrementalSyncTourRequests, setPropertyLabel } from '../../services/gmailService';
 import { useFocusEffect } from '@react-navigation/native';
-import { supabase } from '../../config/supabase';
 import type { TourRequest, PropertyLabel } from '../../types/gmail';
 import { colors, typography, spacing, radii, getInitials, getAvatarColor, labelColor, labelTint } from '../../utils/theme';
 import { PropertyLabelPicker } from '../../components/PropertyLabelPicker';
@@ -53,8 +52,6 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [labelFilter, setLabelFilter] = useState<PropertyLabel | 'all'>('all');
   const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
   const tourListRef = useRef<FlatList>(null);
-  const [calLink, setCalLink] = useState((user && 'cal_link' in user ? user.cal_link : '') || '');
-  const [savingCalLink, setSavingCalLink] = useState(false);
 
   const PAGE_SIZE = 5;
 
@@ -119,27 +116,6 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     const pageIndex = Math.round(e.nativeEvent.contentOffset.x / e.nativeEvent.layoutMeasurement.width);
     setTourPage(pageIndex);
   }, []);
-
-  const handleSaveCalLink = async () => {
-    if (!user) return;
-    setSavingCalLink(true);
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ cal_link: calLink.trim() || null })
-        .eq('id', user.id)
-        .select()
-        .single();
-      if (error) throw error;
-      refreshUserProfile().catch(() => {});
-      Alert.alert('Saved', 'Cal.com link updated');
-    } catch (err) {
-      console.error('Error saving cal link:', err);
-      Alert.alert('Error', 'Failed to save cal.com link');
-    } finally {
-      setSavingCalLink(false);
-    }
-  };
 
   const loadTourData = useCallback(async () => {
     if (!user || user.role !== 'agent') return;
@@ -533,36 +509,25 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        {/* Cal.com Link Section (agents only) */}
+        {/* Booking Settings Section (agents only) */}
         {user.role === 'agent' && (
-          <View style={styles.calLinkSection}>
-            <Text style={styles.sectionTitle}>Scheduling Link</Text>
-            <View style={styles.calLinkRow}>
-              <TextInput
-                style={[
-                  styles.calLinkInput,
-                  calLink.trim() ? styles.calLinkInputFilled : null,
-                ]}
-                value={calLink}
-                onChangeText={setCalLink}
-                placeholder="https://cal.com/your-link"
-                placeholderTextColor={colors.ink400}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-              />
-              <TouchableOpacity
-                style={styles.calLinkSaveButton}
-                onPress={handleSaveCalLink}
-                disabled={savingCalLink}
-              >
-                {savingCalLink ? (
-                  <ActivityIndicator size="small" color={colors.white} />
-                ) : (
-                  <Text style={styles.calLinkSaveText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+          <View style={styles.bookingSection}>
+            <Text style={styles.sectionTitle}>Booking</Text>
+            <TouchableOpacity
+              style={styles.bookingSettingsButton}
+              onPress={() => navigation.navigate('BookingSettings')}
+            >
+              <View style={styles.bookingSettingsIcon}>
+                <Ionicons name="calendar-outline" size={22} color={colors.navy900} />
+              </View>
+              <View style={styles.bookingSettingsText}>
+                <Text style={styles.bookingSettingsTitle}>Booking Settings</Text>
+                <Text style={styles.bookingSettingsSubtext}>
+                  Manage your OpenQ booking link, availability, durations, and intake questions
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.ink400} />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1013,37 +978,38 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     color: colors.coral500,
   },
-  calLinkSection: {
+  bookingSection: {
     marginBottom: spacing['3xl'],
   },
-  calLinkRow: {
+  bookingSettingsButton: {
     flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  calLinkInput: {
-    flex: 1,
+    alignItems: 'center',
+    gap: spacing.md,
     backgroundColor: colors.white,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.ink200,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    ...typography.body,
-    color: colors.ink900,
+    padding: spacing.lg,
   },
-  calLinkInputFilled: {
+  bookingSettingsIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.navy50,
-  },
-  calLinkSaveButton: {
-    backgroundColor: colors.navy900,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  calLinkSaveText: {
-    ...typography.body,
-    color: colors.white,
-    fontWeight: '600',
+  bookingSettingsText: {
+    flex: 1,
+  },
+  bookingSettingsTitle: {
+    ...typography.subheading,
+    color: colors.ink900,
+    marginBottom: spacing.xs,
+  },
+  bookingSettingsSubtext: {
+    ...typography.caption,
+    color: colors.ink600,
   },
   zillowSection: {
     marginBottom: spacing['3xl'],

@@ -6,6 +6,7 @@ export type PropertyLabel = 'none' | 'available' | 'processing' | 'rented';
 
 /** Parsed tour request data (Zillow or StreetEasy) */
 export interface TourRequest {
+  id: string;
   clientName: string;
   clientEmail: string;
   clientPhone?: string;
