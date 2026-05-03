@@ -13,7 +13,13 @@ import {
 } from '../_shared/booking.ts';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PLAIN_NUMBER_REGEX = /^\d+(\.\d+)?$/;
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+
+interface QuestionResponseInput {
+  questionId: string;
+  answer: unknown;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -104,6 +110,36 @@ async function selectedSlotIsAvailable(context: any, eventType: any, selectedSta
   return !busy.some((event) => overlaps(addMinutes(selectedStart, -bufferBefore), addMinutes(selectedEnd, bufferAfter), event.start, event.end));
 }
 
+function answerIsBlank(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  return String(value).trim() === '';
+}
+
+function validDateAnswer(value: unknown): boolean {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function validNumberAnswer(value: unknown): boolean {
+  if (typeof value !== 'string' && typeof value !== 'number') return false;
+  const text = String(value).trim();
+  return PLAIN_NUMBER_REGEX.test(text) && Number.isFinite(Number(text));
+}
+
+function normalizeQuestionResponses(value: unknown): QuestionResponseInput[] | null {
+  if (!Array.isArray(value)) return null;
+  const responses: QuestionResponseInput[] = [];
+  for (const response of value) {
+    if (!response || typeof response !== 'object' || typeof (response as any).questionId !== 'string') return null;
+    responses.push({
+      questionId: (response as any).questionId,
+      answer: (response as any).answer,
+    });
+  }
+  return responses;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -124,7 +160,7 @@ Deno.serve(async (req: Request) => {
       prospectPhone,
       questionResponses = [],
     } = body;
-    if (!slug || !eventTypeId || !start || !prospectName || !prospectEmail) {
+    if (!slug || !eventTypeId || !start || !prospectName || !prospectEmail || !prospectPhone) {
       return jsonResponse({ success: false, error: 'Missing required booking fields' }, 400);
     }
     if (!EMAIL_REGEX.test(prospectEmail)) {
@@ -139,12 +175,32 @@ Deno.serve(async (req: Request) => {
     const eventType = context.eventTypes.find((item: any) => item.id === eventTypeId);
     if (!eventType) return jsonResponse({ success: false, error: 'event_type_not_found' }, 404);
 
+    const normalizedResponses = normalizeQuestionResponses(questionResponses);
+    if (!normalizedResponses) {
+      return jsonResponse({ success: false, error: 'Invalid question responses' }, 400);
+    }
+
+    const validQuestionIds = new Set(context.questions.map((question: any) => question.id));
+    for (const response of normalizedResponses) {
+      if (!response.questionId || !validQuestionIds.has(response.questionId)) {
+        return jsonResponse({ success: false, error: 'Invalid question response' }, 400);
+      }
+    }
+
     const responsesByQuestion = new Map<string, unknown>(
-      (questionResponses as any[]).map((response) => [response.questionId, response.answer]),
+      normalizedResponses.map((response) => [response.questionId, response.answer]),
     );
     for (const question of context.questions) {
-      if (question.required && !responsesByQuestion.has(question.id)) {
+      const answer = responsesByQuestion.get(question.id);
+      if (question.required && (!responsesByQuestion.has(question.id) || answerIsBlank(answer))) {
         return jsonResponse({ success: false, error: `Missing required answer: ${question.prompt}` }, 400);
+      }
+      if (answerIsBlank(answer)) continue;
+      if (question.question_type === 'date' && !validDateAnswer(answer)) {
+        return jsonResponse({ success: false, error: `Invalid date answer: ${question.prompt}` }, 400);
+      }
+      if (question.question_type === 'number' && !validNumberAnswer(answer)) {
+        return jsonResponse({ success: false, error: `Invalid number answer: ${question.prompt}` }, 400);
       }
     }
 
@@ -164,7 +220,7 @@ Deno.serve(async (req: Request) => {
     const propertyAddress = context.tourRequest?.property_address ?? null;
     const source = context.tourRequest?.source ?? null;
     const answers = context.questions
-      .filter((question: any) => responsesByQuestion.has(question.id))
+      .filter((question: any) => responsesByQuestion.has(question.id) && !answerIsBlank(responsesByQuestion.get(question.id)))
       .map((question: any) => `${question.prompt}: ${String(responsesByQuestion.get(question.id))}`)
       .join('\n');
 
@@ -211,7 +267,7 @@ Deno.serve(async (req: Request) => {
         event_type_id: eventType.id,
         prospect_name: prospectName,
         prospect_email: prospectEmail,
-        prospect_phone: prospectPhone || null,
+        prospect_phone: prospectPhone,
         property_address: propertyAddress,
         source,
         starts_at: selectedStart.toISOString(),
@@ -225,12 +281,12 @@ Deno.serve(async (req: Request) => {
 
     if (bookingError) throw bookingError;
 
-    const responseRows = (questionResponses as any[])
-      .filter((response) => response.questionId)
-      .map((response) => ({
+    const responseRows = context.questions
+      .filter((question: any) => responsesByQuestion.has(question.id) && !answerIsBlank(responsesByQuestion.get(question.id)))
+      .map((question: any) => ({
         booking_id: bookingId,
-        question_id: response.questionId,
-        answer: response.answer,
+        question_id: question.id,
+        answer: responsesByQuestion.get(question.id),
       }));
     if (responseRows.length > 0) {
       const { error } = await supabase.from('booking_question_responses').insert(responseRows);

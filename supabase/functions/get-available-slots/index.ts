@@ -38,7 +38,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { slug, request, eventTypeId, dateFrom, dateTo } = await parseJsonRequest(req);
+    const { slug, request, eventTypeId, dateFrom, dateTo, clientNow } = await parseJsonRequest(req);
     if (!slug || !eventTypeId) {
       return jsonResponse({ success: false, error: 'slug and eventTypeId are required' }, 400);
     }
@@ -57,7 +57,11 @@ Deno.serve(async (req: Request) => {
     const accessToken = await getGoogleAccessToken(context.connection);
     const busy = await getCalendarBusyEvents(accessToken, rangeStart, rangeEnd);
 
-    const nowWithNotice = addMinutes(new Date(), context.profile.minimum_notice_minutes);
+    const serverNow = new Date();
+    const parsedClientNow = clientNow ? new Date(clientNow) : null;
+    const clientNowDate = parsedClientNow && !Number.isNaN(parsedClientNow.getTime()) ? parsedClientNow : null;
+    const availabilityFloor = clientNowDate && clientNowDate > serverNow ? clientNowDate : serverNow;
+    const nowWithNotice = addMinutes(availabilityFloor, context.profile.minimum_notice_minutes);
     const duration = Number(eventType.duration_minutes);
     const bufferBefore = Number(eventType.buffer_before_minutes ?? context.profile.default_buffer_before_minutes ?? 0);
     const bufferAfter = Number(eventType.buffer_after_minutes ?? context.profile.default_buffer_after_minutes ?? 0);

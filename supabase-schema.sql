@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS public.agent_booking_profiles (
   booking_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   timezone TEXT NOT NULL DEFAULT 'America/New_York',
   default_booking_horizon_days INTEGER NOT NULL DEFAULT 14 CHECK (default_booking_horizon_days BETWEEN 1 AND 120),
-  minimum_notice_minutes INTEGER NOT NULL DEFAULT 240 CHECK (minimum_notice_minutes >= 0),
+  minimum_notice_minutes INTEGER NOT NULL DEFAULT 0 CHECK (minimum_notice_minutes >= 0),
   slot_increment_minutes INTEGER NOT NULL DEFAULT 30 CHECK (slot_increment_minutes IN (5, 10, 15, 20, 30, 60)),
   working_hours JSONB NOT NULL DEFAULT '[]'::jsonb,
   default_buffer_before_minutes INTEGER NOT NULL DEFAULT 0 CHECK (default_buffer_before_minutes >= 0),

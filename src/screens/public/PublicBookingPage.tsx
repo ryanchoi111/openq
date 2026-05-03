@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabaseUrl } from '../../config/supabase';
+import { supabaseAnonKey, supabaseUrl } from '../../config/supabase';
 import { colors, radii, spacing, typography } from '../../utils/theme';
 
 interface PublicBookingPageProps {
@@ -37,20 +38,125 @@ interface PublicSlot {
   label: string;
 }
 
+const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
+
+interface DateParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const date = new Date();
+  return dateIsoFromParts(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 function addDaysIso(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return dateIsoFromParts(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-async function callFunction(name: string, body: Record<string, unknown>) {
+function datePartsInZone(date: Date, timezone: string): DateParts {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value || '';
+  return {
+    year: Number(value('year')),
+    month: Number(value('month')),
+    day: Number(value('day')),
+  };
+}
+
+function dateIsoInZone(value: string | Date, timezone: string): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  const { year, month, day } = datePartsInZone(date, timezone);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function dateIsoFromParts(year: number, monthIndex: number, day: number): string {
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function monthDateFromIso(dateIso: string): Date {
+  const [year, month] = dateIso.split('-').map(Number);
+  return new Date(year, month - 1, 1);
+}
+
+function addMonths(date: Date, months: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function monthTitle(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(date);
+}
+
+function timeLabelInZone(value: string, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value)).toLowerCase();
+}
+
+function minutesSinceMidnight(date: Date): number {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function questionPlaceholder(question: PublicQuestion): string {
+  const prompt = question.prompt.toLowerCase();
+  if (question.type === 'date') return 'YYYY-MM-DD';
+  if (question.type === 'number' && prompt.includes('budget')) return 'Monthly budget';
+  if (prompt.includes('roommate')) return 'i.e John Doe: 525-667-8273, john@example.com';
+  return 'Answer';
+}
+
+function sanitizeNumberInput(value: string): string {
+  const cleaned = value.replace(/[^0-9.]/g, '');
+  const [whole, ...decimalParts] = cleaned.split('.');
+  return decimalParts.length > 0 ? `${whole}.${decimalParts.join('')}` : whole;
+}
+
+function sanitizePhoneInput(value: string): string {
+  return value.replace(/[^0-9+\-().\s]/g, '');
+}
+
+function isValidDateAnswer(value: unknown): boolean {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function isValidNumberAnswer(value: unknown): boolean {
+  if (typeof value !== 'string' && typeof value !== 'number') return false;
+  const text = String(value).trim();
+  return text !== '' && Number.isFinite(Number(text));
+}
+
+function validateQuestionAnswers(questions: PublicQuestion[], answers: Record<string, unknown>): string | null {
+  for (const question of questions) {
+    const answer = answers[question.id];
+    const text = String(answer ?? '').trim();
+    if (question.required && !text) return `Missing required answer: ${question.prompt}`;
+    if (!text) continue;
+    if (question.type === 'date' && !isValidDateAnswer(answer)) return `Enter a valid date for: ${question.prompt}`;
+    if (question.type === 'number' && !isValidNumberAnswer(answer)) return `Enter a valid number for: ${question.prompt}`;
+  }
+  return null;
+}
+
+async function callFunction(name: string, body: Record<string, unknown>): Promise<any> {
   const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+    },
     body: JSON.stringify(body),
   });
   const data = await response.json();
@@ -64,6 +170,7 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [profile, setProfile] = useState<any>(null);
+  const [notFound, setNotFound] = useState(false);
   const [agent, setAgent] = useState<any>(null);
   const [requestContext, setRequestContext] = useState<any>(null);
   const [eventTypes, setEventTypes] = useState<PublicEventType[]>([]);
@@ -71,6 +178,8 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
   const [selectedEventType, setSelectedEventType] = useState<PublicEventType | null>(null);
   const [slots, setSlots] = useState<PublicSlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [selectedDateIso, setSelectedDateIso] = useState('');
+  const [visibleMonth, setVisibleMonth] = useState(() => monthDateFromIso(todayIso()));
   const [selectedSlot, setSelectedSlot] = useState<PublicSlot | null>(null);
   const [prospectName, setProspectName] = useState('');
   const [prospectEmail, setProspectEmail] = useState('');
@@ -78,13 +187,72 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const updateAnswer = (questionId: string, answer: unknown) => {
+    setAnswers((current) => ({ ...current, [questionId]: answer }));
+    setFormError('');
+  };
 
   const dateTo = useMemo(() => addDaysIso(Math.min(profile?.bookingHorizonDays ?? 14, 14)), [profile?.bookingHorizonDays]);
+  const timezone = profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York';
+  const localTimeFloorMinutes = useMemo(() => minutesSinceMidnight(new Date()), []);
+  const visibleSlots = useMemo(() => {
+    return slots.filter((slot) => minutesSinceMidnight(new Date(slot.start)) >= localTimeFloorMinutes);
+  }, [localTimeFloorMinutes, slots]);
+  const availableDates = useMemo(() => {
+    return new Set(visibleSlots.map((slot) => dateIsoInZone(slot.start, timezone)));
+  }, [visibleSlots, timezone]);
+  const selectedDateSlots = useMemo(() => {
+    return visibleSlots.filter((slot) => dateIsoInZone(slot.start, timezone) === selectedDateIso);
+  }, [selectedDateIso, visibleSlots, timezone]);
+  const calendarDays = useMemo(() => {
+    const year = visibleMonth.getFullYear();
+    const month = visibleMonth.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const previousMonthDays = new Date(year, month, 0).getDate();
+
+    return Array.from({ length: 42 }, (_, index) => {
+      const dayOffset = index - firstDay + 1;
+      let day = dayOffset;
+      let inMonth = true;
+      let dateYear = year;
+      let dateMonth = month;
+
+      if (dayOffset < 1) {
+        day = previousMonthDays + dayOffset;
+        inMonth = false;
+        dateMonth = month - 1;
+        if (dateMonth < 0) {
+          dateMonth = 11;
+          dateYear -= 1;
+        }
+      } else if (dayOffset > daysInMonth) {
+        day = dayOffset - daysInMonth;
+        inMonth = false;
+        dateMonth = month + 1;
+        if (dateMonth > 11) {
+          dateMonth = 0;
+          dateYear += 1;
+        }
+      }
+
+      const dateIso = dateIsoFromParts(dateYear, dateMonth, day);
+      return {
+        dateIso,
+        day,
+        inMonth,
+        hasSlots: availableDates.has(dateIso),
+      };
+    });
+  }, [availableDates, visibleMonth]);
 
   useEffect(() => {
     async function loadProfile() {
       setLoading(true);
       setError('');
+      setNotFound(false);
       try {
         const data = await callFunction('get-public-booking-profile', { slug, request: requestId });
         setProfile(data.profile);
@@ -98,7 +266,11 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
           setProspectPhone(data.requestContext.clientPhone || '');
         }
       } catch (err: any) {
-        setError(err.message || 'Booking page unavailable');
+        if (err.message === 'booking_profile_not_found') {
+          setNotFound(true);
+        } else {
+          setError(err.message || 'Booking page unavailable');
+        }
       } finally {
         setLoading(false);
       }
@@ -109,6 +281,7 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
   const loadSlots = async (eventType: PublicEventType) => {
     setSelectedEventType(eventType);
     setSelectedSlot(null);
+    setSelectedDateIso('');
     setSlotsLoading(true);
     setError('');
     try {
@@ -118,8 +291,19 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
         eventTypeId: eventType.id,
         dateFrom: todayIso(),
         dateTo,
+        clientNow: new Date().toISOString(),
       });
-      setSlots(data.slots);
+      const nextSlots = data.slots ?? [];
+      const nextVisibleSlots = nextSlots.filter((slot: PublicSlot) => (
+        minutesSinceMidnight(new Date(slot.start)) >= localTimeFloorMinutes
+      ));
+      setSlots(nextSlots);
+      const firstSlot = nextVisibleSlots[0];
+      if (firstSlot) {
+        const firstDateIso = dateIsoInZone(firstSlot.start, timezone);
+        setSelectedDateIso(firstDateIso);
+        setVisibleMonth(monthDateFromIso(firstDateIso));
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load availability');
     } finally {
@@ -129,6 +313,16 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
 
   const confirmBooking = async () => {
     if (!selectedEventType || !selectedSlot) return;
+    setFormError('');
+    if (!prospectName.trim() || !prospectEmail.trim() || !prospectPhone.trim()) {
+      setFormError('Please fill out all required fields.');
+      return;
+    }
+    const questionError = validateQuestionAnswers(questions, answers);
+    if (questionError) {
+      setFormError(questionError);
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -150,6 +344,64 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
     }
   };
 
+  const renderWebDateInput = (question: PublicQuestion) => (
+    React.createElement('input' as any, {
+      type: 'date',
+      value: String(answers[question.id] ?? ''),
+      onChange: (event: any) => updateAnswer(question.id, event.target.value),
+      style: StyleSheet.flatten(styles.webInput) as any,
+    })
+  );
+
+  const renderWebNumberInput = (question: PublicQuestion) => (
+    React.createElement('input' as any, {
+      type: 'number',
+      inputMode: 'decimal',
+      min: '0',
+      step: '1',
+      value: String(answers[question.id] ?? ''),
+      placeholder: questionPlaceholder(question),
+      onChange: (event: any) => updateAnswer(question.id, sanitizeNumberInput(event.target.value)),
+      onKeyDown: (event: any) => {
+        if (event.key.length === 1 && !/[0-9.]/.test(event.key)) event.preventDefault();
+      },
+      style: StyleSheet.flatten(styles.webInput) as any,
+    })
+  );
+
+  const renderQuestionInput = (question: PublicQuestion) => {
+    if (question.type === 'boolean') {
+      return (
+        <View style={styles.booleanRow}>
+          {['Yes', 'No'].map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[styles.booleanButton, answers[question.id] === option && styles.booleanButtonSelected]}
+              onPress={() => updateAnswer(question.id, option)}
+            >
+              <Text style={[styles.booleanText, answers[question.id] === option && styles.booleanTextSelected]}>{option}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    }
+
+    if (Platform.OS === 'web' && question.type === 'date') return renderWebDateInput(question);
+    if (Platform.OS === 'web' && question.type === 'number') return renderWebNumberInput(question);
+
+    return (
+      <TextInput
+        style={[styles.input, question.type === 'textarea' && styles.textarea]}
+        value={String(answers[question.id] ?? '')}
+        onChangeText={(value) => updateAnswer(question.id, question.type === 'number' ? sanitizeNumberInput(value) : value)}
+        multiline={question.type === 'textarea'}
+        keyboardType={question.type === 'number' ? 'numeric' : 'default'}
+        placeholder={questionPlaceholder(question)}
+        placeholderTextColor="#71717a"
+      />
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -164,6 +416,23 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
         <View style={styles.confirmCard}>
           <Text style={styles.title}>Tour confirmed</Text>
           <Text style={styles.bodyText}>Your booking has been added to the agent's calendar.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <View style={styles.notFoundPage}>
+        <View style={styles.notFoundCard}>
+          <View style={styles.notFoundIcon}>
+            <Ionicons name="calendar-clear-outline" size={24} color="#fafafa" />
+          </View>
+          <Text style={styles.notFoundTitle}>Booking link not found</Text>
+          <Text style={styles.notFoundText}>
+            This booking link does not exist or is no longer active. Check the URL and try again.
+          </Text>
+          <Text style={styles.notFoundSlug}>/{slug}</Text>
         </View>
       </View>
     );
@@ -204,19 +473,75 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
           <Text style={styles.sectionTitle}>Choose a time</Text>
           {slotsLoading ? (
             <ActivityIndicator size="small" color={colors.navy900} />
-          ) : slots.length === 0 ? (
+          ) : visibleSlots.length === 0 ? (
             <Text style={styles.bodyText}>No available slots found.</Text>
           ) : (
-            <View style={styles.slotGrid}>
-              {slots.slice(0, 40).map((slot) => (
-                <TouchableOpacity
-                  key={slot.start}
-                  style={[styles.slotButton, selectedSlot?.start === slot.start && styles.slotButtonSelected]}
-                  onPress={() => setSelectedSlot(slot)}
-                >
-                  <Text style={[styles.slotText, selectedSlot?.start === slot.start && styles.slotTextSelected]}>{slot.label}</Text>
-                </TouchableOpacity>
-              ))}
+            <View>
+              <View style={styles.calendarHeader}>
+                <Text style={styles.calendarTitle}>{monthTitle(visibleMonth)}</Text>
+                <View style={styles.calendarNav}>
+                  <TouchableOpacity style={styles.navButton} onPress={() => setVisibleMonth((current) => addMonths(current, -1))}>
+                    <Ionicons name="chevron-back" size={18} color="#a1a1aa" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.navButton} onPress={() => setVisibleMonth((current) => addMonths(current, 1))}>
+                    <Ionicons name="chevron-forward" size={18} color="#a1a1aa" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={styles.weekdayRow}>
+                {WEEKDAYS.map((weekday) => (
+                  <Text key={weekday} style={styles.weekdayText}>{weekday}</Text>
+                ))}
+              </View>
+              <View style={styles.calendarGrid}>
+                {calendarDays.map((day, index) => {
+                  const selected = day.dateIso === selectedDateIso;
+                  const disabled = !day.inMonth || !day.hasSlots;
+                  return (
+                    <TouchableOpacity
+                      key={`${day.dateIso}-${index}`}
+                      style={[
+                        styles.dayButton,
+                        !day.inMonth && styles.dayButtonMuted,
+                        day.hasSlots && day.inMonth && styles.dayButtonAvailable,
+                        selected && styles.dayButtonSelected,
+                      ]}
+                      disabled={disabled}
+                      onPress={() => {
+                        setSelectedDateIso(day.dateIso);
+                        setSelectedSlot(null);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dayText,
+                        !day.inMonth && styles.dayTextMuted,
+                        day.hasSlots && day.inMonth && styles.dayTextAvailable,
+                        selected && styles.dayTextSelected,
+                      ]}>
+                        {day.day}
+                      </Text>
+                      {day.hasSlots && day.inMonth && !selected && <View style={styles.availabilityDot} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={styles.timesPanel}>
+                <Text style={styles.timesTitle}>
+                  {new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(`${selectedDateIso}T12:00:00`))}
+                </Text>
+                <View style={styles.slotGrid}>
+                  {selectedDateSlots.map((slot) => (
+                    <TouchableOpacity
+                      key={slot.start}
+                      style={[styles.slotButton, selectedSlot?.start === slot.start && styles.slotButtonSelected]}
+                      onPress={() => setSelectedSlot(slot)}
+                    >
+                      <View style={[styles.slotDot, selectedSlot?.start === slot.start && styles.slotDotSelected]} />
+                      <Text style={[styles.slotText, selectedSlot?.start === slot.start && styles.slotTextSelected]}>{timeLabelInZone(slot.start, timezone)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             </View>
           )}
         </View>
@@ -225,37 +550,33 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
       {selectedSlot && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your details</Text>
-          <TextInput style={styles.input} value={prospectName} onChangeText={setProspectName} placeholder="Your name" placeholderTextColor="#71717a" />
-          <TextInput style={styles.input} value={prospectEmail} onChangeText={setProspectEmail} placeholder="Email address" placeholderTextColor="#71717a" autoCapitalize="none" />
-          <TextInput style={styles.input} value={prospectPhone} onChangeText={setProspectPhone} placeholder="Phone number" placeholderTextColor="#71717a" />
+          <TextInput style={styles.input} value={prospectName} onChangeText={(value) => { setProspectName(value); setFormError(''); }} placeholder="Your name *" placeholderTextColor="#71717a" />
+          <TextInput style={styles.input} value={prospectEmail} onChangeText={(value) => { setProspectEmail(value); setFormError(''); }} placeholder="Email address *" placeholderTextColor="#71717a" autoCapitalize="none" keyboardType="email-address" />
+          <TextInput
+            style={styles.input}
+            value={prospectPhone}
+            onChangeText={(value) => {
+              setProspectPhone(sanitizePhoneInput(value));
+              setFormError('');
+            }}
+            placeholder="Phone number *"
+            placeholderTextColor="#71717a"
+            keyboardType="phone-pad"
+          />
 
           {questions.map((question) => (
             <View key={question.id} style={styles.questionBlock}>
               <Text style={styles.questionLabel}>{question.prompt}{question.required ? ' *' : ''}</Text>
-              {question.type === 'boolean' ? (
-                <View style={styles.booleanRow}>
-                  {['Yes', 'No'].map((option) => (
-                    <TouchableOpacity
-                      key={option}
-                      style={[styles.booleanButton, answers[question.id] === option && styles.booleanButtonSelected]}
-                      onPress={() => setAnswers((current) => ({ ...current, [question.id]: option }))}
-                    >
-                      <Text style={[styles.booleanText, answers[question.id] === option && styles.booleanTextSelected]}>{option}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : (
-                <TextInput
-                  style={[styles.input, question.type === 'textarea' && styles.textarea]}
-                  value={String(answers[question.id] ?? '')}
-                  onChangeText={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))}
-                  multiline={question.type === 'textarea'}
-                  placeholder="Answer"
-                  placeholderTextColor="#71717a"
-                />
-              )}
+              {renderQuestionInput(question)}
             </View>
           ))}
+
+          {!!formError && (
+            <View style={styles.inlineAlert}>
+              <Ionicons name="alert-circle-outline" size={16} color={colors.coral500} />
+              <Text style={styles.inlineAlertText}>{formError}</Text>
+            </View>
+          )}
 
           <TouchableOpacity style={styles.confirmButton} onPress={confirmBooking} disabled={submitting}>
             {submitting ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={styles.confirmText}>Confirm Booking</Text>}
@@ -273,6 +594,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
+  },
+  notFoundPage: {
+    minHeight: '100%',
+    backgroundColor: '#0f0f10',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  notFoundCard: {
+    width: '100%',
+    maxWidth: 480,
+    borderWidth: 1,
+    borderColor: '#2a2a2c',
+    borderRadius: radii.lg,
+    backgroundColor: '#181818',
+    padding: spacing['3xl'],
+    alignItems: 'center',
+  },
+  notFoundIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#27272a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  notFoundTitle: {
+    ...typography.heading,
+    color: '#fafafa',
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  notFoundText: {
+    ...typography.body,
+    color: '#a1a1aa',
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  notFoundSlug: {
+    ...typography.caption,
+    color: '#71717a',
+    backgroundColor: '#111111',
+    borderWidth: 1,
+    borderColor: '#2a2a2c',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   container: {
     minHeight: '100%',
@@ -380,12 +749,111 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  calendarTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#f4f4f5',
+  },
+  calendarNav: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  navButton: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#111111',
+    borderWidth: 1,
+    borderColor: '#2a2a2c',
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
+  },
+  weekdayText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#d4d4d8',
+    letterSpacing: 0,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -3,
+  },
+  dayButton: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    padding: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayButtonAvailable: {
+    borderRadius: radii.md,
+  },
+  dayButtonMuted: {
+    opacity: 0.25,
+  },
+  dayButtonSelected: {
+    backgroundColor: '#fafafa',
+    borderRadius: radii.md,
+  },
+  dayText: {
+    fontSize: 14,
+    color: '#71717a',
+  },
+  dayTextAvailable: {
+    color: '#f4f4f5',
+    fontWeight: '600',
+  },
+  dayTextMuted: {
+    color: '#52525b',
+  },
+  dayTextSelected: {
+    color: '#111111',
+    fontWeight: '700',
+  },
+  availabilityDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#34d399',
+    marginTop: 4,
+  },
+  timesPanel: {
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2c',
+    marginTop: spacing.xl,
+    paddingTop: spacing.xl,
+  },
+  timesTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fafafa',
+    marginBottom: spacing.md,
+  },
   slotButton: {
     borderWidth: 1,
     borderColor: '#3f3f46',
     borderRadius: radii.md,
-    padding: spacing.md,
+    minWidth: 136,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 13,
     backgroundColor: '#111111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
   slotButtonSelected: {
     backgroundColor: '#fafafa',
@@ -394,9 +862,19 @@ const styles = StyleSheet.create({
   slotText: {
     ...typography.caption,
     color: '#f4f4f5',
+    fontWeight: '600',
   },
   slotTextSelected: {
     color: '#111111',
+  },
+  slotDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#34d399',
+  },
+  slotDotSelected: {
+    backgroundColor: '#111111',
   },
   input: {
     borderWidth: 1,
@@ -408,6 +886,27 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: '#fafafa',
     marginBottom: spacing.md,
+  },
+  webInput: {
+    width: '100%',
+    height: 48,
+    minHeight: 48,
+    maxHeight: 48,
+    boxSizing: 'border-box',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: '#3f3f46',
+    borderRadius: radii.md,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.md,
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: '#111111',
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#fafafa',
+    marginBottom: spacing.md,
+    outlineColor: '#2684ff',
   },
   textarea: {
     minHeight: 96,
@@ -456,6 +955,23 @@ const styles = StyleSheet.create({
   confirmText: {
     ...typography.subheading,
     color: '#111111',
+  },
+  inlineAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.45)',
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  inlineAlertText: {
+    ...typography.caption,
+    color: '#fecaca',
+    fontWeight: '600',
   },
   confirmCard: {
     maxWidth: 520,
