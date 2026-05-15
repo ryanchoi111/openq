@@ -117,17 +117,12 @@ export const applicationService = {
 
       if (error) {
         console.error('Edge Function error:', error);
-        throw new Error(`Failed to send emails: ${error.message}`);
+        throw new Error('Failed to send application emails');
       }
 
       if (!data.success) {
-        const errorDetails = data.results
-          ?.filter((r: any) => r.status === 'rejected' && r.error)
-          .map((r: any) => `${r.recipient}: ${r.error}`)
-          .join('; ');
-
-        const errorMessage = data.error || errorDetails || `Failed to send ${data.failed} of ${recipients.length} email(s)`;
-        throw new Error(errorMessage);
+        console.error('Application email send failed:', data);
+        throw new Error('Failed to send application emails');
       }
     } catch (error) {
       throw error;

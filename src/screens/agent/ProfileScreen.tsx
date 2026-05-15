@@ -160,7 +160,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         const tours = await getTourRequests(user.id);
         setTourRequests(tours);
       } else {
-        Alert.alert('Error', result.error || 'Sync failed');
+        Alert.alert('Sync failed', 'We could not refresh tour requests. Please try again.');
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to refresh tour requests');
@@ -178,7 +178,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         Alert.alert('Success', 'Gmail connected');
         await loadTourData();
       } else {
-        Alert.alert('Error', result.error || 'Failed to connect Gmail');
+        Alert.alert('Gmail connection failed', 'We could not connect Gmail. Please try again.');
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to connect Gmail');
@@ -196,7 +196,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         Alert.alert('Backfill Complete', `Found ${result.tourRequestsFound || 0} tour requests`);
         await loadTourData();
       } else {
-        Alert.alert('Error', result.error || 'Backfill failed');
+        Alert.alert('Backfill failed', 'We could not import older tour requests. Please try again.');
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to backfill tour requests');
@@ -214,7 +214,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         Alert.alert('Success', 'Gmail watch renewed');
         await loadTourData();
       } else {
-        Alert.alert('Error', result.error || 'Failed to renew Gmail watch');
+        Alert.alert('Reconnect failed', 'We could not reconnect Gmail monitoring. Please try again.');
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to renew Gmail watch');

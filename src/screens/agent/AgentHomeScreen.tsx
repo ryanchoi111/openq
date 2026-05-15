@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,15 +15,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AgentStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { eventService } from '../../services/eventService';
-import { getCalendarEvents } from '../../services/calendarService';
+import { getCalendarEventsRange } from '../../services/calendarService';
 import { connectGmailAccount, getGmailConnectionStatus } from '../../services/gmailService';
 import { OpenHouseEvent, CalendarEvent } from '../../types';
 import { colors, typography, spacing, radii, badgeStyles } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'AgentHome'>;
+
+const CALENDAR_CACHE_TTL_MS = 5 * 60 * 1000;
+const CALENDAR_WEEK_END_OFFSET_DAYS = 6;
+
+interface CalendarCachePayload {
+  rangeStart: string;
+  rangeEnd: string;
+  timezone: string;
+  fetchedAt: number;
+  events: CalendarEvent[];
+}
 
 /** Format event time range as compact string */
 function formatTimeRange(start: string, end: string): string {
@@ -45,10 +57,84 @@ function formatPropertyDetails(event: OpenHouseEvent): string {
   return parts.join(' · ');
 }
 
+function dateIsoFromDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysIso(dateIso: string, days: number): string {
+  const [year, month, day] = dateIso.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return dateIsoFromDate(date);
+}
+
+function getCalendarRangeStart(): string {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  today.setDate(today.getDate() + mondayOffset);
+  return dateIsoFromDate(today);
+}
+
+function calendarCacheKey(agentId: string, timezone: string): string {
+  return `openq:calendar-events:${agentId}:${timezone}`;
+}
+
+function dateIsoInZone(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value || '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
+function isoDatesBetween(startIso: string, endIso: string): string[] {
+  const dates: string[] = [];
+  const cursor = new Date(`${startIso}T00:00:00Z`);
+  const end = new Date(`${endIso}T00:00:00Z`);
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+function eventDateKeys(event: CalendarEvent, timezone: string): string[] {
+  if (!event.start.includes('T')) {
+    const endDate = new Date(`${event.end}T00:00:00Z`);
+    endDate.setUTCDate(endDate.getUTCDate() - 1);
+    const inclusiveEnd = endDate.toISOString().slice(0, 10);
+    return isoDatesBetween(event.start, inclusiveEnd);
+  }
+
+  const startKey = dateIsoInZone(new Date(event.start), timezone);
+  const endDate = new Date(event.end);
+  const inclusiveEnd = endDate.getTime() > new Date(event.start).getTime()
+    ? new Date(endDate.getTime() - 1)
+    : endDate;
+  const endKey = dateIsoInZone(inclusiveEnd, timezone);
+  return isoDatesBetween(startKey, endKey);
+}
+
+function groupEventsByDate(events: CalendarEvent[], timezone: string): Record<string, CalendarEvent[]> {
+  return events.reduce<Record<string, CalendarEvent[]>>((groups, event) => {
+    for (const key of eventDateKeys(event, timezone)) {
+      groups[key] = [...(groups[key] ?? []), event];
+    }
+    return groups;
+  }, {});
+}
+
 /** Get current week dates (Monday–Sunday) */
 function getWeekDates(): { dayLabel: string; dateNum: number; isoDate: string; isToday: boolean }[] {
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = dateIsoFromDate(today);
   const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ...
   // Monday offset: if Sunday (0), go back 6 days; otherwise go back (day - 1)
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -59,7 +145,7 @@ function getWeekDates(): { dayLabel: string; dateNum: number; isoDate: string; i
   return labels.map((label, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const isoDate = d.toISOString().split('T')[0];
+    const isoDate = dateIsoFromDate(d);
     return {
       dayLabel: label,
       dateNum: d.getDate(),
@@ -79,49 +165,91 @@ const AgentHomeScreen: React.FC<Props> = () => {
   const fabScale = React.useRef(new Animated.Value(1)).current;
 
   // Calendar state
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [selectedDate, setSelectedDate] = useState(dateIsoFromDate(new Date()));
+  const [calendarEventsByDate, setCalendarEventsByDate] = useState<Record<string, CalendarEvent[]>>({});
   const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState('');
   const [needsCalendarReauth, setNeedsCalendarReauth] = useState(false);
   const [hasGmailConnection, setHasGmailConnection] = useState<boolean | null>(null);
 
   const weekDates = getWeekDates();
   const deviceTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const calendarEvents = calendarEventsByDate[selectedDate] ?? [];
 
   // Reload when screen gains focus
   useFocusEffect(
     useCallback(() => {
       loadAllEvents();
-      checkGmailAndLoadCalendar(selectedDate);
+      checkGmailAndLoadCalendarRange();
     }, [user?.id])
   );
 
-  // Reload calendar when date changes
-  useEffect(() => {
-    if (hasGmailConnection && user?.id) {
-      loadCalendarEvents(selectedDate);
+  const hydrateCalendarCache = async () => {
+    if (!user?.id) return false;
+    try {
+      const raw = await AsyncStorage.getItem(calendarCacheKey(user.id, deviceTimezone));
+      if (!raw) return false;
+      const cached = JSON.parse(raw) as CalendarCachePayload;
+      const rangeStart = getCalendarRangeStart();
+      const rangeEnd = addDaysIso(rangeStart, CALENDAR_WEEK_END_OFFSET_DAYS);
+      if (cached.timezone !== deviceTimezone) return false;
+      if (cached.rangeStart !== rangeStart || cached.rangeEnd !== rangeEnd) return false;
+      if (Date.now() - cached.fetchedAt > CALENDAR_CACHE_TTL_MS) return false;
+      const grouped = groupEventsByDate(cached.events, deviceTimezone);
+      setCalendarEventsByDate(grouped);
+      return true;
+    } catch (error) {
+      console.error('Calendar cache read error:', error);
+      return false;
     }
-  }, [selectedDate]);
+  };
 
-  const checkGmailAndLoadCalendar = async (date: string) => {
+  const persistCalendarCache = async (payload: CalendarCachePayload) => {
+    if (!user?.id) return;
+    try {
+      await AsyncStorage.setItem(calendarCacheKey(user.id, deviceTimezone), JSON.stringify(payload));
+    } catch (error) {
+      console.error('Calendar cache write error:', error);
+    }
+  };
+
+  const checkGmailAndLoadCalendarRange = async (forceRefresh = false) => {
     if (!user?.id) return;
     const status = await getGmailConnectionStatus(user.id);
     setHasGmailConnection(!!status);
     if (status && !status.needsReauth) {
-      loadCalendarEvents(date);
+      const hydrated = await hydrateCalendarCache();
+      if (!hydrated || forceRefresh) loadCalendarEventsRange();
     } else if (status?.needsReauth) {
       setNeedsCalendarReauth(true);
     }
   };
 
-  const loadCalendarEvents = async (date: string) => {
+  const loadCalendarEventsRange = async () => {
     if (!user?.id) return;
     setCalendarLoading(true);
+    setCalendarError('');
     setNeedsCalendarReauth(false);
-    const result = await getCalendarEvents(user.id, date, deviceTimezone);
-    setCalendarEvents(result.events);
-    if (result.needsReauth) setNeedsCalendarReauth(true);
-    setCalendarLoading(false);
+    try {
+      const rangeStart = getCalendarRangeStart();
+      const rangeEnd = addDaysIso(rangeStart, CALENDAR_WEEK_END_OFFSET_DAYS);
+      const result = await getCalendarEventsRange(user.id, rangeStart, rangeEnd, deviceTimezone);
+      const grouped = groupEventsByDate(result.events, deviceTimezone);
+      setCalendarEventsByDate(grouped);
+      if (result.needsReauth) setNeedsCalendarReauth(true);
+      if (result.error && !result.needsReauth) setCalendarError(result.error);
+      if (!result.error) {
+        persistCalendarCache({
+          rangeStart,
+          rangeEnd,
+          timezone: deviceTimezone,
+          fetchedAt: Date.now(),
+          events: result.events,
+        });
+      }
+    } finally {
+      setCalendarLoading(false);
+    }
   };
 
   const loadAllEvents = async () => {
@@ -149,7 +277,7 @@ const AgentHomeScreen: React.FC<Props> = () => {
     try {
       const [eventsResult] = await Promise.all([
         eventService.getEventsByAgent(user.id),
-        loadCalendarEvents(selectedDate),
+        loadCalendarEventsRange(),
       ]);
       setScheduledEvents(eventsResult.scheduled);
       setActiveEvents(eventsResult.active);
@@ -189,9 +317,9 @@ const AgentHomeScreen: React.FC<Props> = () => {
     const result = await connectGmailAccount(user.id);
     if (result.success) {
       setHasGmailConnection(true);
-      loadCalendarEvents(selectedDate);
+      loadCalendarEventsRange();
     } else {
-      Alert.alert('Error', result.error || 'Failed to connect Google Calendar');
+      Alert.alert('Calendar connection failed', 'We could not connect Google Calendar. Please try again.');
     }
   };
 
@@ -218,8 +346,12 @@ const AgentHomeScreen: React.FC<Props> = () => {
       );
     }
 
-    if (calendarLoading) {
+    if (calendarLoading && calendarEvents.length === 0) {
       return <ActivityIndicator size="small" color={colors.navy700} style={styles.calendarLoader} />;
+    }
+
+    if (calendarError) {
+      return <Text style={styles.emptyDayText}>{calendarError}</Text>;
     }
 
     if (calendarEvents.length === 0) {

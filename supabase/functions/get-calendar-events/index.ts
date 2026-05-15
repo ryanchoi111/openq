@@ -1,13 +1,16 @@
 /**
  * Get Calendar Events Edge Function
  *
- * Fetches Google Calendar events for an agent on a given day.
+ * Fetches Google Calendar events for an agent on a given day or date range.
  * Reuses the Gmail OAuth connection (refresh token) stored in agent_gmail_connections.
  *
- * Expects: { agentId: string, date?: string, timezone?: string }
+ * Expects: { agentId: string, date?: string, dateFrom?: string, dateTo?: string, timezone?: string }
  *   - date: ISO date string (e.g. "2026-04-12"), defaults to today
+ *   - dateFrom/dateTo: ISO date strings for a range, capped to 31 days
  *   - timezone: IANA timezone (e.g. "America/New_York"), defaults to UTC
  */
+
+import { zonedTimeToUtc } from '../_shared/booking.ts';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
@@ -17,6 +20,31 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+function addDaysIso(dateIso: string, days: number): string {
+  const date = new Date(`${dateIso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetween(startIso: string, endIso: string): number {
+  const start = new Date(`${startIso}T00:00:00Z`).getTime();
+  const end = new Date(`${endIso}T00:00:00Z`).getTime();
+  return Math.floor((end - start) / 86_400_000);
+}
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function validTimezone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -55,7 +83,7 @@ Deno.serve(async (req: Request) => {
     }
     const authUser = await userResponse.json();
 
-    const { agentId, date, timezone } = await req.json();
+    const { agentId, date, dateFrom, dateTo, timezone } = await req.json();
     if (!agentId) {
       return new Response(
         JSON.stringify({ success: false, error: 'agentId is required' }),
@@ -138,53 +166,92 @@ Deno.serve(async (req: Request) => {
 
     // Compute day boundaries in the agent's timezone
     const tz = timezone || 'UTC';
+    if (!validTimezone(tz)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'invalid_timezone' }),
+        { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
     const targetDate = date || new Date().toISOString().split('T')[0];
+    const rangeStartDate = dateFrom || targetDate;
+    const requestedRangeEndDate = dateTo || targetDate;
+    if (!isIsoDate(rangeStartDate) || !isIsoDate(requestedRangeEndDate)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'invalid_date_range' }),
+        { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+    const requestedDays = daysBetween(rangeStartDate, requestedRangeEndDate);
+    if (requestedDays < 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'invalid_date_range' }),
+        { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+    const rangeEndDate = requestedDays >= 31
+      ? addDaysIso(rangeStartDate, 30)
+      : requestedRangeEndDate;
+    const rangeStart = zonedTimeToUtc(rangeStartDate, '00:00', tz);
+    const rangeEnd = zonedTimeToUtc(addDaysIso(rangeEndDate, 1), '00:00', tz);
 
     const calendarParams = new URLSearchParams({
-      timeMin: `${targetDate}T00:00:00`,
-      timeMax: `${targetDate}T23:59:59`,
+      timeMin: rangeStart.toISOString(),
+      timeMax: rangeEnd.toISOString(),
       timeZone: tz,
       singleEvents: 'true',
       orderBy: 'startTime',
+      maxResults: '2500',
     });
 
-    const calendarResponse = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${calendarParams}`,
-      {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
+    const calendarItems: any[] = [];
+    let pageToken: string | undefined;
+    do {
+      if (pageToken) {
+        calendarParams.set('pageToken', pageToken);
+      } else {
+        calendarParams.delete('pageToken');
       }
-    );
 
-    if (!calendarResponse.ok) {
-      const status = calendarResponse.status;
-      if (status === 403) {
-        // Missing calendar scope — agent needs to re-authenticate
-        await fetch(
-          `${supabaseUrl}/rest/v1/agent_gmail_connections?id=eq.${connection.id}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'apikey': supabaseServiceKey,
-              'Authorization': `Bearer ${supabaseServiceKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=minimal',
-            },
-            body: JSON.stringify({ needs_reauth: true }),
-          }
-        );
-        return new Response(
-          JSON.stringify({ success: false, error: 'calendar_scope_missing', needsReauth: true }),
-          { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-        );
+      const calendarResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?${calendarParams}`,
+        {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        }
+      );
+
+      if (!calendarResponse.ok) {
+        const status = calendarResponse.status;
+        if (status === 403) {
+          // Missing calendar scope — agent needs to re-authenticate
+          await fetch(
+            `${supabaseUrl}/rest/v1/agent_gmail_connections?id=eq.${connection.id}`,
+            {
+              method: 'PATCH',
+              headers: {
+                'apikey': supabaseServiceKey,
+                'Authorization': `Bearer ${supabaseServiceKey}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal',
+              },
+              body: JSON.stringify({ needs_reauth: true }),
+            }
+          );
+          return new Response(
+            JSON.stringify({ success: false, error: 'calendar_scope_missing', needsReauth: true }),
+            { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+          );
+        }
+        const errText = await calendarResponse.text();
+        console.error(`[Calendar Events] API error (${status}): ${errText}`);
+        throw new Error('Failed to fetch calendar events');
       }
-      const errText = await calendarResponse.text();
-      console.error(`[Calendar Events] API error (${status}): ${errText}`);
-      throw new Error('Failed to fetch calendar events');
-    }
 
-    const calendarData = await calendarResponse.json();
+      const calendarData = await calendarResponse.json();
+      calendarItems.push(...(calendarData.items || []));
+      pageToken = calendarData.nextPageToken;
+    } while (pageToken);
 
-    const events = (calendarData.items || []).map((item: any) => ({
+    const events = calendarItems.map((item: any) => ({
       id: item.id,
       summary: item.summary || '(No title)',
       start: item.start.dateTime || item.start.date,

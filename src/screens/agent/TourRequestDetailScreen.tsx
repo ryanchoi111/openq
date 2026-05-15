@@ -82,13 +82,12 @@ const TourRequestDetailScreen: React.FC<Props> = ({ route }) => {
         },
       });
 
-      if (error) throw error;
-      if (data && !data.success) throw new Error(data.error || 'Failed to send');
+      if (error || (data && !data.success)) throw new Error('send_failed');
 
       setSent(true);
       Alert.alert('Sent', `Email sent to ${tourRequest.clientEmail}`);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to send email');
+    } catch {
+      Alert.alert('Send failed', 'We could not send this email. Please try again.');
     } finally {
       setSending(false);
     }

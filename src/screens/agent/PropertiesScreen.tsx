@@ -34,14 +34,6 @@ const PropertiesScreen: React.FC<Props> = ({ navigation }) => {
       <FlatList
         data={properties}
         keyExtractor={(item) => item.id}
-        ListHeaderComponent={
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('CreateProperty')}
-          >
-            <Text style={styles.addButtonText}>+ Add Property</Text>
-          </TouchableOpacity>
-        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}

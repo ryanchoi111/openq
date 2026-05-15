@@ -103,10 +103,6 @@ function timeLabelInZone(value: string, timezone: string): string {
   }).format(new Date(value)).toLowerCase();
 }
 
-function minutesSinceMidnight(date: Date): number {
-  return date.getHours() * 60 + date.getMinutes();
-}
-
 function questionPlaceholder(question: PublicQuestion): string {
   const prompt = question.prompt.toLowerCase();
   if (question.type === 'date') return 'YYYY-MM-DD';
@@ -149,6 +145,40 @@ function validateQuestionAnswers(questions: PublicQuestion[], answers: Record<st
   return null;
 }
 
+class PublicBookingError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+function publicBookingErrorMessage(code?: string): string {
+  switch (code) {
+    case 'calendar_not_connected':
+      return 'This booking page is not connected to a calendar yet. Please contact the agent.';
+    case 'calendar_scope_missing':
+    case 'token_refresh_failed':
+    case 'calendar_events_failed':
+      return 'The agent needs to reconnect Google Calendar before bookings can be accepted.';
+    case 'event_type_not_found':
+      return 'This tour option is no longer available. Refresh the page and try again.';
+    case 'slot_unavailable':
+      return 'That time is no longer available. Please choose another slot.';
+    case 'calendar_insert_failed':
+      return 'We could not add this booking to the calendar. Please try again or contact the agent.';
+    case 'booking_profile_not_found':
+      return 'This booking link does not exist or is no longer active.';
+    default:
+      return 'We could not complete that request. Please try again.';
+  }
+}
+
+function messageForPublicBookingError(error: unknown, fallback: string): string {
+  return error instanceof PublicBookingError ? error.message : fallback;
+}
+
 async function callFunction(name: string, body: Record<string, unknown>): Promise<any> {
   const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',
@@ -159,9 +189,10 @@ async function callFunction(name: string, body: Record<string, unknown>): Promis
     },
     body: JSON.stringify(body),
   });
-  const data = await response.json();
+  const data = await response.json().catch(() => null);
   if (!response.ok || !data.success) {
-    throw new Error(data.error || 'Request failed');
+    const code = typeof data?.error === 'string' ? data.error : 'request_failed';
+    throw new PublicBookingError(code, publicBookingErrorMessage(code));
   }
   return data;
 }
@@ -196,16 +227,12 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
 
   const dateTo = useMemo(() => addDaysIso(Math.min(profile?.bookingHorizonDays ?? 14, 14)), [profile?.bookingHorizonDays]);
   const timezone = profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York';
-  const localTimeFloorMinutes = useMemo(() => minutesSinceMidnight(new Date()), []);
-  const visibleSlots = useMemo(() => {
-    return slots.filter((slot) => minutesSinceMidnight(new Date(slot.start)) >= localTimeFloorMinutes);
-  }, [localTimeFloorMinutes, slots]);
   const availableDates = useMemo(() => {
-    return new Set(visibleSlots.map((slot) => dateIsoInZone(slot.start, timezone)));
-  }, [visibleSlots, timezone]);
+    return new Set(slots.map((slot) => dateIsoInZone(slot.start, timezone)));
+  }, [slots, timezone]);
   const selectedDateSlots = useMemo(() => {
-    return visibleSlots.filter((slot) => dateIsoInZone(slot.start, timezone) === selectedDateIso);
-  }, [selectedDateIso, visibleSlots, timezone]);
+    return slots.filter((slot) => dateIsoInZone(slot.start, timezone) === selectedDateIso);
+  }, [selectedDateIso, slots, timezone]);
   const calendarDays = useMemo(() => {
     const year = visibleMonth.getFullYear();
     const month = visibleMonth.getMonth();
@@ -266,10 +293,10 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
           setProspectPhone(data.requestContext.clientPhone || '');
         }
       } catch (err: any) {
-        if (err.message === 'booking_profile_not_found') {
+        if (err instanceof PublicBookingError && err.code === 'booking_profile_not_found') {
           setNotFound(true);
         } else {
-          setError(err.message || 'Booking page unavailable');
+          setError(messageForPublicBookingError(err, 'Booking page unavailable. Please try again later.'));
         }
       } finally {
         setLoading(false);
@@ -294,18 +321,15 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
         clientNow: new Date().toISOString(),
       });
       const nextSlots = data.slots ?? [];
-      const nextVisibleSlots = nextSlots.filter((slot: PublicSlot) => (
-        minutesSinceMidnight(new Date(slot.start)) >= localTimeFloorMinutes
-      ));
       setSlots(nextSlots);
-      const firstSlot = nextVisibleSlots[0];
+      const firstSlot = nextSlots[0];
       if (firstSlot) {
         const firstDateIso = dateIsoInZone(firstSlot.start, timezone);
         setSelectedDateIso(firstDateIso);
         setVisibleMonth(monthDateFromIso(firstDateIso));
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load availability');
+      setError(messageForPublicBookingError(err, 'We could not load availability. Please try again.'));
     } finally {
       setSlotsLoading(false);
     }
@@ -338,7 +362,7 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
       });
       setConfirmed(true);
     } catch (err: any) {
-      setError(err.message === 'slot_unavailable' ? 'That time is no longer available. Please choose another slot.' : err.message);
+      setError(messageForPublicBookingError(err, publicBookingErrorMessage()));
     } finally {
       setSubmitting(false);
     }
@@ -473,7 +497,7 @@ const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ slug, requestId }
           <Text style={styles.sectionTitle}>Choose a time</Text>
           {slotsLoading ? (
             <ActivityIndicator size="small" color={colors.navy900} />
-          ) : visibleSlots.length === 0 ? (
+          ) : slots.length === 0 ? (
             <Text style={styles.bodyText}>No available slots found.</Text>
           ) : (
             <View>

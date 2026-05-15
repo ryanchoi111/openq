@@ -92,8 +92,8 @@ const BookingSettingsScreen: React.FC<Props> = () => {
         ...question,
         localId: 'id' in question && typeof question.id === 'string' ? question.id : makeLocalId(),
       })));
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load booking settings');
+    } catch {
+      Alert.alert('Settings unavailable', 'We could not load booking settings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -213,8 +213,8 @@ const BookingSettingsScreen: React.FC<Props> = () => {
             ]
           : undefined,
       );
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to save booking settings');
+    } catch {
+      Alert.alert('Save failed', 'We could not save booking settings. Please try again.');
     } finally {
       setSaving(false);
     }
