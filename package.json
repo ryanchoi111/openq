@@ -16,6 +16,7 @@
     "web": "npx expo start --web",
     "build:web": "npx expo export -p web",
     "type-check": "tsc --noEmit",
+    "test": "vitest run src",
     "build:android": "eas build --platform android --profile production",
     "build:ios": "eas build --platform ios --profile production",
     "lint": "eslint src/ --ext .ts,.tsx",
@@ -62,7 +63,8 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "prettier": "^3.8.1",
     "shadcn": "^3.5.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.0.15"
   },
   "private": true
 }

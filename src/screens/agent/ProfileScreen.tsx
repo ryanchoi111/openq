@@ -26,16 +26,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { TourRequest, PropertyLabel } from '../../types/gmail';
 import { colors, typography, spacing, radii, getInitials, getAvatarColor, labelColor, labelTint } from '../../utils/theme';
 import { PropertyLabelPicker } from '../../components/PropertyLabelPicker';
+import {
+  buildPropertyInquiryGroups,
+  type ListingTypeFilter,
+  type PropertyInquiryGroup,
+} from '../../utils/propertyInquiries';
 
 type Props = NativeStackScreenProps<AgentStackParamList, 'Profile'>;
-
-interface PropertyGroup {
-    propertyAddress: string;
-    requests: TourRequest[];
-    mostRecent: TourRequest;
-    sources: ('zillow' | 'streeteasy')[];
-    label: PropertyLabel;
-}
 
 const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, refreshUserProfile, deleteAccount } = useAuth();
@@ -50,6 +47,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [tourPage, setTourPage] = useState(0);
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const [labelFilter, setLabelFilter] = useState<PropertyLabel | 'all'>('all');
+  const [listingTypeFilter, setListingTypeFilter] = useState<ListingTypeFilter>('all');
   const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
   const tourListRef = useRef<FlatList>(null);
 
@@ -57,55 +55,21 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   
 
-  const propertyGroups = useMemo(() => {
-    const groupMap = new Map<string, TourRequest[]>();
-    for (const req of tourRequests) {
-      const key = req.propertyAddress || 'Unknown Address';
-      if (!groupMap.has(key)) groupMap.set(key, []);
-      groupMap.get(key)!.push(req);
-    }
-
-    const groups: PropertyGroup[] = [];
-    for (const [address, requests] of groupMap) {
-      const sorted = [...requests].sort(
-        (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      );
-      const sourceSet = new Set<'zillow' | 'streeteasy'>();
-      for (const r of requests) {
-        if (r.source) sourceSet.add(r.source);
-      }
-      groups.push({
-        propertyAddress: address,
-        requests: sorted,
-        mostRecent: sorted[0],
-        sources: Array.from(sourceSet),
-        label: sorted[0]?.label ?? 'none',
-      });
-    }
-    return groups;
-  }, [tourRequests]);
-
-  const sortedGroups = useMemo(() => {
-    return [...propertyGroups].sort((a, b) => {
-      const diff =
-        new Date(b.mostRecent.receivedAt).getTime() -
-        new Date(a.mostRecent.receivedAt).getTime();
-      return sortNewestFirst ? diff : -diff;
-    });
-  }, [propertyGroups, sortNewestFirst]);
-
   const filteredGroups = useMemo(
     () =>
-      labelFilter === 'all'
-        ? sortedGroups
-        : sortedGroups.filter((g) => g.label === labelFilter),
-    [sortedGroups, labelFilter],
+      buildPropertyInquiryGroups({
+        tourRequests,
+        labelFilter,
+        listingTypeFilter,
+        sortNewestFirst,
+      }),
+    [tourRequests, labelFilter, listingTypeFilter, sortNewestFirst],
   );
 
   const totalPages = Math.ceil(filteredGroups.length / PAGE_SIZE);
 
   const groupPages = useMemo(() => {
-    const pages: PropertyGroup[][] = [];
+    const pages: PropertyInquiryGroup[][] = [];
     for (let i = 0; i < filteredGroups.length; i += PAGE_SIZE) {
       pages.push(filteredGroups.slice(i, i + PAGE_SIZE));
     }
@@ -160,10 +124,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         const tours = await getTourRequests(user.id);
         setTourRequests(tours);
       } else {
-        Alert.alert('Sync failed', 'We could not refresh tour requests. Please try again.');
+        Alert.alert('Sync failed', 'We could not refresh property inquiries. Please try again.');
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to refresh tour requests');
+      Alert.alert('Error', 'We could not refresh property inquiries. Please try again.');
     } finally {
       setRefreshing(false);
     }
@@ -193,13 +157,13 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const result = await backfillTourRequests(user.id);
       if (result.success) {
-        Alert.alert('Backfill Complete', `Found ${result.tourRequestsFound || 0} tour requests`);
+        Alert.alert('Backfill Complete', `Found ${result.tourRequestsFound || 0} property inquiries`);
         await loadTourData();
       } else {
-        Alert.alert('Backfill failed', 'We could not import older tour requests. Please try again.');
+        Alert.alert('Backfill failed', 'We could not import older property inquiries. Please try again.');
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to backfill tour requests');
+      Alert.alert('Error', 'We could not import older property inquiries. Please try again.');
     } finally {
       setBackfilling(false);
     }
@@ -531,10 +495,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        {/* Tour Requests Section (agents only) */}
+        {/* Property Inquiries Section (agents only) */}
         {user.role === 'agent' && (
           <View style={styles.zillowSection}>
-            <Text style={styles.sectionTitle}>Tour Requests</Text>
+            <Text style={styles.sectionTitle}>Property Inquiries</Text>
             {!gmailConnected ? (
               <TouchableOpacity
                 style={styles.connectGmailButton}
@@ -601,7 +565,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                 ) : tourRequests.length === 0 ? (
                   <View style={styles.emptyTours}>
                     <Ionicons name="mail-unread-outline" size={32} color={colors.ink400} />
-                    <Text style={styles.emptyToursText}>No tour requests yet</Text>
+                    <Text style={styles.emptyToursText}>No property inquiries yet</Text>
                     <Text style={styles.emptyToursSubtext}>
                       Emails from Zillow and StreetEasy will appear here automatically
                     </Text>
@@ -645,11 +609,47 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                         );
                       })}
                     </ScrollView>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.filterChipRow}
+                    >
+                      {([
+                        ['all', 'All'],
+                        ['rent', 'For rent'],
+                        ['sale', 'For sale'],
+                      ] as const).map(([filter, label]) => {
+                        const selected = listingTypeFilter === filter;
+                        return (
+                          <TouchableOpacity
+                            key={filter}
+                            onPress={() => {
+                              setListingTypeFilter(filter);
+                              setTourPage(0);
+                              tourListRef.current?.scrollToOffset({ offset: 0, animated: false });
+                            }}
+                            style={[
+                              styles.filterChip,
+                              selected && { backgroundColor: colors.navy900, borderColor: colors.navy900 },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.filterChipText,
+                                selected && { color: colors.white },
+                              ]}
+                            >
+                              {label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
 
                     {/* Sort toggle + count */}
                     <View style={styles.tourListHeader}>
                       <Text style={styles.tourCount}>
-                        {filteredGroups.length} {filteredGroups.length === 1 ? 'property' : 'properties'} ({tourRequests.length} requests)
+                        {filteredGroups.length} {filteredGroups.length === 1 ? 'property' : 'properties'} ({tourRequests.length} inquiries)
                       </Text>
                       <TouchableOpacity
                         style={styles.sortButton}
@@ -671,7 +671,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
 
                     {/* Horizontal paged list of property groups */}
-                    <FlatList<PropertyGroup[]>
+                    <FlatList<PropertyInquiryGroup[]>
                       ref={tourListRef}
                       data={groupPages}
                       keyExtractor={(_, index) => `page-${index}`}
@@ -715,7 +715,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                               </View>
                               <View style={styles.tourDetails}>
                                 <Text style={styles.tourClient}>
-                                  {group.requests.length} {group.requests.length === 1 ? 'request' : 'requests'}
+                                  {group.requests.length} {group.requests.length === 1 ? 'inquiry' : 'inquiries'}
                                 </Text>
                                 <Text style={styles.tourEmail}>
                                   Latest: {group.mostRecent.clientName} · {new Date(group.mostRecent.receivedAt).toLocaleDateString()}
@@ -726,6 +726,13 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                                   <View key={src} style={styles.sourceBadge}>
                                     <Text style={styles.sourceBadgeText}>
                                       {src === 'streeteasy' ? 'StreetEasy' : 'Zillow'}
+                                    </Text>
+                                  </View>
+                                ))}
+                                {group.listingTypes.map((type) => (
+                                  <View key={type} style={styles.listingTypeBadge}>
+                                    <Text style={styles.listingTypeBadgeText}>
+                                      {type === 'sale' ? 'For sale' : 'For rent'}
                                     </Text>
                                   </View>
                                 ))}
@@ -777,7 +784,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         propertyAddress={pickerOpenFor ?? ''}
         currentLabel={
           pickerOpenFor
-            ? (sortedGroups.find((g) => g.propertyAddress === pickerOpenFor)?.label ?? 'none')
+            ? (filteredGroups.find((g) => g.propertyAddress === pickerOpenFor)?.label ?? 'none')
             : 'none'
         }
         onSelect={async (label) => {
@@ -1201,6 +1208,7 @@ const styles = StyleSheet.create({
   },
   sourceBadgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
   },
   sourceBadge: {
@@ -1214,6 +1222,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     color: colors.ink600,
+  },
+  listingTypeBadge: {
+    backgroundColor: colors.navy50,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+    marginRight: spacing.xs,
+  },
+  listingTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.navy900,
   },
 });
 

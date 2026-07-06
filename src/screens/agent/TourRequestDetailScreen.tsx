@@ -38,7 +38,7 @@ const TourRequestDetailScreen: React.FC<Props> = ({ route }) => {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const subject = `Tour Request: ${tourRequest.propertyAddress || 'Property'}`;
+  const subject = `Property Inquiry: ${tourRequest.propertyAddress || 'Property'}`;
 
   useEffect(() => {
     let mounted = true;
@@ -104,6 +104,11 @@ const TourRequestDetailScreen: React.FC<Props> = ({ route }) => {
             <Text style={styles.dateText}>
               Received {new Date(tourRequest.receivedAt).toLocaleDateString()}
             </Text>
+            <View style={styles.listingTypeBadge}>
+              <Text style={styles.listingTypeBadgeText}>
+                {tourRequest.listingType === 'sale' ? 'For sale' : 'For rent'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -204,6 +209,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     marginTop: 2,
+  },
+  listingTypeBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  listingTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1e3a8a',
   },
   section: {
     marginBottom: 20,

@@ -118,13 +118,19 @@ CREATE TABLE IF NOT EXISTS public.tour_requests (
   client_email TEXT,
   client_phone TEXT,
   property_address TEXT,
+  listing_type TEXT NOT NULL DEFAULT 'rent' CHECK (listing_type IN ('rent','sale')),
   raw_subject TEXT,
   source TEXT,
   received_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  CONSTRAINT tour_requests_gmail_message_id_key UNIQUE (gmail_message_id),
-  CONSTRAINT tour_requests_unique_lead UNIQUE (agent_id, client_email, property_address)
+  CONSTRAINT tour_requests_gmail_message_id_key UNIQUE (gmail_message_id)
 );
+
+ALTER TABLE public.tour_requests
+  ADD COLUMN IF NOT EXISTS listing_type TEXT NOT NULL DEFAULT 'rent' CHECK (listing_type IN ('rent','sale'));
+
+ALTER TABLE public.tour_requests
+  DROP CONSTRAINT IF EXISTS tour_requests_unique_lead;
 
 -- Per-property metadata derived from inbound tour requests (status labels, etc.)
 CREATE TABLE IF NOT EXISTS public.tour_request_properties (

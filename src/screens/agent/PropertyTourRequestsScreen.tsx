@@ -130,7 +130,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
     const selected = sorted.filter((r) => selectedIds.has(r.gmailMessageId) && hasValidClientEmail(r));
 
     for (const req of selected) {
-      const subject = `Tour Request: ${propertyAddress || 'Property'}`;
+      const subject = `Property Inquiry: ${propertyAddress || 'Property'}`;
       let body = `Hi ${req.clientName},\n\nThank you for your interest in ${propertyAddress}!`;
       if (bookingSlug) body += ` Book a tour using this link: ${buildBookingUrl(bookingSlug, req.id)}`;
       body += `\n\nBest regards,\n${agentName}`;
@@ -200,6 +200,11 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
               </Text>
             </View>
           )}
+          <View style={styles.listingTypeBadge}>
+            <Text style={styles.listingTypeBadgeText}>
+              {item.listingType === 'sale' ? 'For sale' : 'For rent'}
+            </Text>
+          </View>
           <Text style={styles.date}>
             {new Date(item.receivedAt).toLocaleDateString()}
           </Text>
@@ -216,7 +221,7 @@ const PropertyTourRequestsScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.headerInfo}>
             <Text style={styles.address}>{propertyAddress}</Text>
             <Text style={styles.count}>
-              {sorted.length} {sorted.length === 1 ? 'request' : 'requests'}
+              {sorted.length} {sorted.length === 1 ? 'inquiry' : 'inquiries'}
             </Text>
           </View>
         </View>
@@ -407,6 +412,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     color: colors.ink600,
+  },
+  listingTypeBadge: {
+    backgroundColor: colors.navy50,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+  },
+  listingTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.navy900,
   },
   date: {
     ...typography.caption,

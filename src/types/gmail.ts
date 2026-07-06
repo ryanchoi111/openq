@@ -3,6 +3,7 @@
  */
 
 export type PropertyLabel = 'none' | 'available' | 'processing' | 'rented';
+export type ListingType = 'rent' | 'sale';
 
 /** Parsed tour request data (Zillow or StreetEasy) */
 export interface TourRequest {
@@ -16,6 +17,7 @@ export interface TourRequest {
   gmailMessageId: string;
   agentEmail: string;
   source?: 'zillow' | 'streeteasy';
+  listingType: ListingType;
   label: PropertyLabel;
 }
 
