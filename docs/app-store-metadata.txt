@@ -1,0 +1,33 @@
+OpenQ App Store Metadata
+
+Use this as the source draft for App Store Connect. Final wording should be checked against the submitted build and current backend availability before public release.
+
+App Information
+
+- Name: OpenQ
+- Subtitle: Property tours and renter follow-up
+- Primary category: Business
+- Secondary category: Productivity
+- Platform launch scope: iPhone only
+- Bundle ID: com.openqapp.openq
+- Support URL: https://openq.app/support.html
+- Privacy Policy URL: https://openq.app/privacy.html
+
+Description
+
+OpenQ helps real estate agents and property managers keep property tours, renter inquiries, and follow-up organized in one mobile workspace.
+
+Create property records, run tour queues from QR check-ins, capture renter inquiries from Gmail, review property-specific lead activity, schedule bookings with calendar availability, upload profile and application documents, and follow up with prospective renters from the app.
+
+For renters and guests, OpenQ supports quick QR-based tour check-in, live waitlist status, and tour history without adding friction to the showing.
+
+Keywords
+
+real estate, property management, rentals, renter leads, tour scheduling, leasing, showing, open house, waitlist, QR check-in, Gmail leads, calendar booking, property manager, agent tools
+
+Review Notes
+
+- Provide a reviewer demo account with agent role and sample property data.
+- Confirm the production Supabase project, Edge Functions, Resend sender, Google OAuth consent screen, Gmail Pub/Sub topic, and Calendar integration are live before review.
+- Explain that Google access is used by agents to import renter inquiry emails and manage booking availability.
+- Include steps for Sign in with Apple, Sign in with Google, account deletion, property CRUD, Gmail sync, booking, profile photo upload, document upload, and email sending.

@@ -1,6 +1,6 @@
 /**
  * Welcome Screen
- * Entry point - choose to scan QR (guest) or sign in/up
+ * Entry point - choose to join a tour (guest) or sign in/up
  */
 
 import React from 'react';
@@ -20,8 +20,8 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>OpenHouse</Text>
-        <Text style={styles.subtitle}>Streamline your open house experience</Text>
+        <Text style={styles.title}>OpenQ</Text>
+        <Text style={styles.subtitle}>Manage property tours and renter follow-up</Text>
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity
@@ -29,7 +29,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
             onPress={() => navigation.navigate('GuestJoin', {})}
           >
             <Text style={styles.primaryButtonText}>Join as Guest</Text>
-            <Text style={styles.buttonSubtext}>Quick scan & join waitlist</Text>
+            <Text style={styles.buttonSubtext}>Scan a property tour QR code</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -48,7 +48,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <Text style={styles.footerText}>
-          Agents: Create an account to manage your open houses
+          Agents: Create an account to manage properties, inquiries, and tours
         </Text>
       </View>
     </SafeAreaView>

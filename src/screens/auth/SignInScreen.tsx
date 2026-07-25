@@ -23,7 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignIn'>;
 
 const SignInScreen: React.FC<Props> = ({ navigation }) => {
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signInWithApple } = useAuth();
 
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
@@ -67,6 +67,19 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
     } catch (error: any) {
       console.error('[SignIn] Google OAuth error:', error);
       Alert.alert('Sign In Failed', 'Google sign-in failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    try {
+      setLoading(true);
+      await signInWithApple();
+      // Navigation handled automatically by AppNavigator
+    } catch (error: any) {
+      console.error('[SignIn] Apple OAuth error:', error);
+      Alert.alert('Sign In Failed', 'Apple sign-in failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -142,6 +155,15 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
           >
             <Ionicons name="logo-google" size={20} color="#fff" />
             <Text style={styles.oauthButtonText}>Sign in with Google</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.oauthButton, styles.appleButton]}
+            onPress={handleAppleSignIn}
+            disabled={loading}
+          >
+            <Ionicons name="logo-apple" size={22} color="#fff" />
+            <Text style={styles.oauthButtonText}>Sign in with Apple</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -263,6 +285,9 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     backgroundColor: '#4285F4',
+  },
+  appleButton: {
+    backgroundColor: '#000',
   },
   oauthButtonText: {
     color: '#fff',

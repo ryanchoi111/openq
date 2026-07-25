@@ -25,7 +25,7 @@ import { UserRole } from '../../types';
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
 const SignUpScreen: React.FC<Props> = ({ navigation }) => {
-  const { signUpWithEmail, signInWithGoogle } = useAuth();
+  const { signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
 
   const [name, setName] = useState('');
   const [emailAddress, setEmailAddress] = useState('');
@@ -86,6 +86,18 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const handleAppleSignUp = async () => {
+    try {
+      setLoading(true);
+      await signInWithApple(role);
+    } catch (error: any) {
+      console.error('[SignUp] Apple OAuth error:', error);
+      Alert.alert('Apple Sign Up Failed', 'Apple sign-up failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -95,7 +107,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join OpenHouse today</Text>
+            <Text style={styles.subtitle}>Manage property tours and renter follow-up</Text>
           </View>
 
           <View style={styles.form}>
@@ -210,6 +222,14 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.oauthButtonText}>Sign up with Google</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={[styles.oauthButton, styles.appleButton]}
+              onPress={handleAppleSignUp}
+              disabled={loading}
+            >
+              <Ionicons name="logo-apple" size={22} color="#fff" />
+              <Text style={styles.oauthButtonText}>Sign up with Apple</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.linkButton}
@@ -357,6 +377,9 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     backgroundColor: '#4285F4',
+  },
+  appleButton: {
+    backgroundColor: '#000',
   },
   oauthButtonText: {
     color: '#fff',

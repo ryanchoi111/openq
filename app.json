@@ -17,11 +17,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.openqapp.openq",
+      "usesAppleSignIn": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "This app needs access to your camera to scan QR codes for open house events.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select a profile picture.",
+        "NSCameraUsageDescription": "OpenQ uses the camera to take profile photos and scan property tour QR codes.",
+        "NSPhotoLibraryUsageDescription": "OpenQ uses your photo library when you choose a profile photo or property-related upload.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -41,7 +42,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      ["expo-camera", { "cameraPermission": "This app needs camera access to scan QR codes.", "recordAudioAndroid": false }],
+      ["expo-camera", { "cameraPermission": "OpenQ uses the camera to scan property tour QR codes.", "recordAudioAndroid": false }],
       "expo-font"
     ],
     "updates": {
