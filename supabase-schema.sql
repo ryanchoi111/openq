@@ -118,13 +118,19 @@ CREATE TABLE IF NOT EXISTS public.tour_requests (
   client_email TEXT,
   client_phone TEXT,
   property_address TEXT,
+  listing_type TEXT NOT NULL DEFAULT 'rent' CHECK (listing_type IN ('rent','sale')),
   raw_subject TEXT,
   source TEXT,
   received_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  CONSTRAINT tour_requests_gmail_message_id_key UNIQUE (gmail_message_id),
-  CONSTRAINT tour_requests_unique_lead UNIQUE (agent_id, client_email, property_address)
+  CONSTRAINT tour_requests_gmail_message_id_key UNIQUE (gmail_message_id)
 );
+
+ALTER TABLE public.tour_requests
+  ADD COLUMN IF NOT EXISTS listing_type TEXT NOT NULL DEFAULT 'rent' CHECK (listing_type IN ('rent','sale'));
+
+ALTER TABLE public.tour_requests
+  DROP CONSTRAINT IF EXISTS tour_requests_unique_lead;
 
 -- Per-property metadata derived from inbound tour requests (status labels, etc.)
 CREATE TABLE IF NOT EXISTS public.tour_request_properties (
@@ -445,6 +451,34 @@ CREATE TRIGGER update_booking_questions_updated_at BEFORE UPDATE ON public.booki
 
 CREATE TRIGGER update_bookings_updated_at BEFORE UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Delete the authenticated user's account and user-owned records.
+-- This is called from in-app account deletion and relies on ON DELETE CASCADE
+-- from auth.users -> public.users -> agent-owned domain tables.
+CREATE OR REPLACE FUNCTION public.delete_user_account()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, storage
+AS $$
+DECLARE
+  v_user_id UUID := auth.uid();
+BEGIN
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  DELETE FROM storage.objects
+  WHERE owner = v_user_id
+     OR name LIKE v_user_id::text || '/%';
+
+  DELETE FROM auth.users
+  WHERE id = v_user_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.delete_user_account() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.delete_user_account() TO authenticated;
 
 -- Function to automatically reorder waitlist positions when entry is removed
 CREATE OR REPLACE FUNCTION reorder_waitlist_positions()

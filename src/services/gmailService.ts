@@ -237,7 +237,7 @@ export async function getTourRequests(agentId: string): Promise<TourRequest[]> {
   return (requestsRes.data || []).map((row: any) => ({
     id: row.id,
     clientName: row.client_name,
-    clientEmail: row.client_email,
+    clientEmail: row.client_email ?? '',
     clientPhone: row.client_phone,
     propertyAddress: row.property_address,
     rawSubject: row.raw_subject,
@@ -245,6 +245,7 @@ export async function getTourRequests(agentId: string): Promise<TourRequest[]> {
     gmailMessageId: row.gmail_message_id,
     agentEmail: row.agent_email || '',
     source: row.source,
+    listingType: row.listing_type ?? 'rent',
     label: labelByAddress.get(row.property_address) ?? 'none',
   }));
 }
@@ -298,7 +299,7 @@ export async function backfillTourRequests(
     };
   } catch (error) {
     console.error('Gmail backfill error:', error);
-    return { success: false, error: 'Failed to backfill tour requests' };
+    return { success: false, error: 'Failed to backfill property inquiries' };
   }
 }
 
@@ -342,7 +343,7 @@ export async function incrementalSyncTourRequests(
     };
   } catch (error) {
     console.error('Incremental sync error:', error);
-    return { success: false, error: 'Failed to sync tour requests' };
+    return { success: false, error: 'Failed to sync property inquiries' };
   }
 }
 

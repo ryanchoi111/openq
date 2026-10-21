@@ -1,6 +1,6 @@
 /**
  * Authentication Context
- * Pure Supabase Auth with Google OAuth support
+ * Pure Supabase Auth with Google and Apple OAuth support
  */
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -24,6 +24,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
   signInWithGoogle: (role?: UserRole) => Promise<void>;
+  signInWithApple: (role?: UserRole) => Promise<void>;
   signInAsGuest: (name: string, email: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -129,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) throw error;
   };
 
-  const signInWithGoogle = async (role?: UserRole) => {
+  const signInWithOAuthProvider = async (provider: 'google' | 'apple', role?: UserRole) => {
     try {
       // Store role for post-OAuth update (trigger defaults to 'tenant')
       // NOTE: Users can self-select roles. RLS policies prevent unauthorized data access.
@@ -145,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const redirectUri = AuthSession.makeRedirectUri();
 
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider,
         options: { redirectTo: redirectUri },
       });
 
@@ -211,9 +212,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(userData as User);
           await SecureStore.deleteItemAsync(GUEST_USER_KEY);
 
-          // Auto-connect Gmail for agents if Google refresh token available
+          // Auto-connect Gmail for agents only when Google returns a refresh token.
           const effectiveRole = userData.role;
-          if (effectiveRole === 'agent' && provider_refresh_token && userData.email) {
+          if (provider === 'google' && effectiveRole === 'agent' && provider_refresh_token && userData.email) {
             try {
               await supabase.from('agent_gmail_connections').upsert(
                 {
@@ -233,9 +234,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (error) {
-      console.error('[Auth] Google sign-in failed:', error);
+      console.error(`[Auth] ${provider} sign-in failed:`, error);
       throw error;
     }
+  };
+
+  const signInWithGoogle = async (role?: UserRole) => {
+    await signInWithOAuthProvider('google', role);
+  };
+
+  const signInWithApple = async (role?: UserRole) => {
+    await signInWithOAuthProvider('apple', role);
   };
 
   const signInAsGuest = async (name: string, email: string) => {
@@ -315,6 +324,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signInWithEmail,
       signUpWithEmail,
       signInWithGoogle,
+      signInWithApple,
       signInAsGuest,
       signOut,
       deleteAccount,

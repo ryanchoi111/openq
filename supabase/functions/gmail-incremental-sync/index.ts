@@ -138,13 +138,17 @@ Deno.serve(async (req: Request) => {
           console.error(`[Incremental Sync] Error fetching ${messageIds[i]}:`, msg.reason);
           continue;
         }
-        const record = parseMessageToTourRecord(
-          msg.value,
-          messageIds[i],
-          connection.agent_id,
-          connection.email,
-        );
-        if (record) records.push(record);
+        try {
+          const record = parseMessageToTourRecord(
+            msg.value,
+            messageIds[i],
+            connection.agent_id,
+            connection.email,
+          );
+          if (record) records.push(record);
+        } catch (parseErr) {
+          console.error(`[Incremental Sync] Error parsing ${messageIds[i]}:`, parseErr);
+        }
       }
 
       // Upsert parsed records

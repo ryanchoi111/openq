@@ -4,12 +4,10 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
-const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
-
 // --- Types ---
 
 export type EmailSource = 'zillow' | 'streeteasy';
+export type ListingType = 'rent' | 'sale';
 
 export interface ParsedTourEmail {
   clientName: string;
@@ -17,6 +15,7 @@ export interface ParsedTourEmail {
   clientPhone?: string;
   propertyAddress: string;
   source: EmailSource;
+  listingType: ListingType;
 }
 
 export interface TourRecord {
@@ -26,6 +25,7 @@ export interface TourRecord {
   client_email: string;
   client_phone: string | null;
   property_address: string;
+  listing_type: ListingType;
   raw_subject: string;
   received_at: string;
   source: EmailSource;
@@ -106,8 +106,10 @@ export async function getAccessToken(
     }
   }
 
-  const clientId = oauthClientId || GOOGLE_CLIENT_ID;
-  const isNativeClient = clientId !== GOOGLE_CLIENT_ID;
+  const googleClientId = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
+  const googleClientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
+  const clientId = oauthClientId || googleClientId;
+  const isNativeClient = clientId !== googleClientId;
 
   const params: Record<string, string> = {
     client_id: clientId,
@@ -115,7 +117,7 @@ export async function getAccessToken(
     grant_type: 'refresh_token',
   };
   if (!isNativeClient) {
-    params.client_secret = GOOGLE_CLIENT_SECRET;
+    params.client_secret = googleClientSecret;
   }
 
   const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -165,7 +167,10 @@ export function detectEmailSource(
   const bodyLower = body.toLowerCase();
 
   // StreetEasy
-  if (from.includes('noreply@email.streeteasy.com') && subject.includes('streeteasy inquiry from')) {
+  const isStreetEasyFrom = from.includes('noreply@email.streeteasy.com');
+  const isStreetEasyRental = subject.includes('streeteasy inquiry from');
+  const isStreetEasySale = subject.includes('agent inquiry');
+  if (isStreetEasyFrom && (isStreetEasyRental || isStreetEasySale)) {
     return 'streeteasy';
   }
 
@@ -193,12 +198,18 @@ export function parseStreetEasyEmail(
   body: string
 ): ParsedTourEmail | null {
   const subject = headers.find((h) => h.name.toLowerCase() === 'subject')?.value ?? '';
+  const saleSubjectMatch = subject.match(/^Agent Inquiry\s*\|\s*(.+?)\s*\|\s*(.+)$/i);
   const subjectMatch = subject.match(/^(.+?)\s+StreetEasy\s+Inquiry\s+From\s+(.+)$/i);
 
   let clientName = '';
   let propertyAddress = '';
+  let listingType: ListingType = 'rent';
 
-  if (subjectMatch) {
+  if (saleSubjectMatch) {
+    listingType = 'sale';
+    propertyAddress = saleSubjectMatch[1].trim();
+    clientName = saleSubjectMatch[2].trim();
+  } else if (subjectMatch) {
     propertyAddress = subjectMatch[1].trim();
     clientName = subjectMatch[2].trim();
   } else {
@@ -212,14 +223,15 @@ export function parseStreetEasyEmail(
   if (!clientName) return null;
 
   const emailMatch = body.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-  const phoneMatch = body.match(/(\+?\d{10,})/);
+  const phoneMatch = body.match(/(\+?1?[\s.-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
 
   return {
     clientName,
     clientEmail: emailMatch?.[1] ?? '',
-    clientPhone: phoneMatch?.[1],
+    clientPhone: phoneMatch?.[1]?.trim(),
     propertyAddress,
     source: 'streeteasy',
+    listingType,
   };
 }
 
@@ -243,6 +255,7 @@ export function parseZillowEmail(body: string): ParsedTourEmail | null {
         clientPhone: phoneMatchOld?.[1]?.trim(),
         propertyAddress: propertyMatchOld[1].trim(),
         source: 'zillow',
+        listingType: 'rent',
       };
     }
   }
@@ -260,6 +273,7 @@ export function parseZillowEmail(body: string): ParsedTourEmail | null {
     clientPhone: phoneMatch?.[1]?.trim(),
     propertyAddress: addressMatch?.[1]?.trim() || '',
     source: 'zillow',
+    listingType: 'rent',
   };
 }
 
@@ -441,6 +455,7 @@ export function parseMessageToTourRecord(
       client_email: parsed.clientEmail,
       client_phone: parsed.clientPhone || null,
       property_address: parsed.propertyAddress,
+      listing_type: parsed.listingType,
       raw_subject: subject,
       received_at: receivedAt,
       source: parsed.source,
@@ -461,6 +476,7 @@ export function parseMessageToTourRecord(
     client_email: fromHeader,
     client_phone: null,
     property_address: fallbackAddress,
+    listing_type: source === 'streeteasy' && subject.toLowerCase().includes('agent inquiry') ? 'sale' : 'rent',
     raw_subject: subject,
     received_at: receivedAt,
     source,
@@ -567,6 +583,7 @@ export async function updateHistoryId(
 /** Tour request search queries for StreetEasy and Zillow. */
 export const TOUR_REQUEST_QUERIES = [
   'from:noreply@email.streeteasy.com subject:"streeteasy inquiry from"',
+  'from:noreply@email.streeteasy.com subject:"Agent Inquiry"',
   'from:rentalclientservices@zillowrentals.com subject:"new zillow group rentals contact"',
 ];
 
